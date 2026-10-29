@@ -1,0 +1,4 @@
+.env
+node_modules/
+auth-state.json
+sophos-profile/

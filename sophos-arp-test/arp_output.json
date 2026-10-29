@@ -1,0 +1,1952 @@
+[
+  {
+    "ip": "192.168.40.118",
+    "mac": "bc:22:28:95:ad:7d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.20",
+    "mac": "c6:27:bd:39:82:7d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.167",
+    "mac": "78:98:e8:68:4f:c9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.148",
+    "mac": "e0:8f:4c:a0:fe:24",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.26",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.197",
+    "mac": "50:03:cf:7a:1b:dc",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.107",
+    "mac": "9c:53:22:92:ff:d7",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.93.53",
+    "mac": "04:bf:1b:8c:6f:4c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.107",
+    "mac": "bc:22:28:95:ad:7b",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.245",
+    "mac": "f4:3b:d8:c5:1f:ca",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.9",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.137",
+    "mac": "98:5f:41:61:86:6d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.254",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "169.254.15.106",
+    "mac": "5c:28:86:1d:00:9f",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.47",
+    "mac": "00:a0:4d:00:05:32",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.205",
+    "mac": "a4:17:52:03:bc:8f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.2",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.77",
+    "mac": "00:e0:4c:3d:cc:cf",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.130",
+    "mac": "78:98:e8:68:50:19",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.243",
+    "mac": "00:e0:4c:3d:cc:cf",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.125",
+    "mac": "b8:1e:a4:e2:07:0f",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.32",
+    "mac": "24:fb:e3:eb:0b:19",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.17",
+    "mac": "bc:22:28:94:f0:e9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.55",
+    "mac": "44:37:e6:47:d1:c8",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.183",
+    "mac": "e8:65:d4:18:28:b8",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.45.106",
+    "mac": "a4:0c:66:24:b3:12",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.228",
+    "mac": "0e:d0:1e:69:a5:03",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.10",
+    "mac": "00:e0:70:b0:ac:a2",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.213",
+    "mac": "48:45:20:21:a1:5b",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.123",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "172.16.100.2",
+    "mac": "a8:91:62:12:ca:1d",
+    "interface": "PortF1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.25",
+    "mac": "d8:9e:f3:86:f7:91",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.168",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.153",
+    "mac": "64:49:7d:e7:e0:05",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.206",
+    "mac": "30:56:0f:7f:d7:95",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.108",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.18",
+    "mac": "62:8e:50:db:d3:a2",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.67",
+    "mac": "a2:d2:04:94:91:a3",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.146",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.28",
+    "mac": "84:69:93:56:5d:f4",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.195",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.109",
+    "mac": "68:7a:64:6a:70:de",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.97",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.7",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.1.8",
+    "mac": "64:49:7d:a4:86:d4",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.135",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.244",
+    "mac": "c0:35:32:6c:c9:c9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.122",
+    "mac": "64:49:7d:a4:86:d4",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.37",
+    "mac": "2c:58:b9:b2:16:d3",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.203",
+    "mac": "a4:17:52:03:ba:b0",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.184",
+    "mac": "ee:88:2b:28:9a:93",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.233",
+    "mac": "3c:33:00:09:2b:09",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.119",
+    "mac": "52:f9:17:80:ed:a9",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.222",
+    "mac": "64:4e:d7:9f:af:7b",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.15",
+    "mac": "8c:32:23:37:c4:23",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.124",
+    "mac": "0c:79:55:d7:dd:78",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.173",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.1.2",
+    "mac": "30:03:c8:f9:3a:85",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.226",
+    "mac": "9a:f1:3e:45:3a:9c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.211",
+    "mac": "34:41:5d:c8:1d:e7",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.44.209",
+    "mac": "64:49:7d:e3:04:3b",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.113",
+    "mac": "84:90:0a:81:3f:e0",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.23",
+    "mac": "e2:fc:16:a0:24:09",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.166",
+    "mac": "00:e0:4c:36:0b:cb",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.200",
+    "mac": "5c:28:86:1c:9f:0e",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.151",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.25",
+    "mac": "a4:0c:66:24:b8:d5",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.196",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.106",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.106",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.8",
+    "mac": "a6:eb:5f:5c:fa:78",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.136",
+    "mac": "f8:ed:fc:df:6b:22",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.249",
+    "mac": "8c:32:23:53:a6:d8",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.103",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.46",
+    "mac": "72:a7:d1:d4:d1:93",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.204",
+    "mac": "a4:17:52:03:bc:5a",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.31",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.189",
+    "mac": "00:e0:4c:36:0b:cb",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.242",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.124",
+    "mac": "64:49:7d:e3:26:e6",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.65.174",
+    "mac": "50:bb:b5:45:ba:38",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.158",
+    "mac": "64:49:7d:e3:04:54",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.182",
+    "mac": "7c:b0:c2:b2:62:13",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.231",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.212",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.90",
+    "mac": "5c:28:86:1c:4d:28",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.122",
+    "mac": "2c:58:b9:58:99:80",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.1.20",
+    "mac": "64:49:7d:e7:e2:7b",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.24",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.171",
+    "mac": "d4:e9:8a:a0:f6:04",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.152",
+    "mac": "48:5f:99:99:25:47",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.6",
+    "mac": "bc:ec:a0:3b:57:59",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.255.124",
+    "mac": "80:84:89:c2:50:51",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.201",
+    "mac": "00:d0:0d:25:f0:af",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.111",
+    "mac": "78:98:e8:68:4f:ca",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.13",
+    "mac": "d2:72:38:b0:9f:d5",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.66",
+    "mac": "04:7c:16:13:23:50",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.141",
+    "mac": "26:bf:24:9e:3b:c9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.194",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.108",
+    "mac": "80:03:0d:a9:0b:1a",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.10.136",
+    "mac": "f8:54:f6:8e:04:bd",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.6",
+    "mac": "76:2f:37:b9:ba:eb",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.134",
+    "mac": "d4:93:90:3c:f5:5a",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.247",
+    "mac": "28:c5:c8:60:7f:8e",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.121",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.202",
+    "mac": "a4:17:52:03:ba:9a",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.21",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.187",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.232",
+    "mac": "70:15:fb:10:c1:e7",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.118",
+    "mac": "10:5f:ad:75:2b:a0",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.217",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.127",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.29",
+    "mac": "7c:b0:c2:0d:be:c5",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.172",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.157",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.210",
+    "mac": "28:c5:c8:60:7f:36",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.33",
+    "mac": "1e:ad:ca:98:18:91",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.112",
+    "mac": "a4:0c:66:24:b3:12",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.22",
+    "mac": "f2:1d:1b:54:23:be",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.161",
+    "mac": "e0:8f:4c:7a:df:46",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.150",
+    "mac": "06:0b:ca:ed:bb:95",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.199",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.105",
+    "mac": "20:37:06:32:2c:1c",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.52",
+    "mac": "04:bf:1b:8c:6f:4c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.101",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.11",
+    "mac": "76:d3:8c:2c:a2:32",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.131.42",
+    "mac": "50:bb:b5:46:91:90",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.139",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.21",
+    "mac": "c8:5a:cf:b1:81:c7",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.248",
+    "mac": "04:7c:16:6b:18:1d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.102",
+    "mac": "64:49:7d:e3:04:77",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.41",
+    "mac": "70:15:fb:10:a6:58",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.30",
+    "mac": "d8:bb:c1:3b:c5:a9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.109",
+    "mac": "78:98:e8:68:4f:cd",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.188",
+    "mac": "b6:fa:d1:1c:5c:cc",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.237",
+    "mac": "08:a1:36:7b:95:52",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.115",
+    "mac": "10:5f:ad:74:ca:5c",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.34",
+    "mac": "34:5a:60:e7:27:37",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.157",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.177",
+    "mac": "10:e7:c6:f3:47:4d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.230",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "169.254.95.170",
+    "mac": "9c:c7:d3:a4:e0:5a",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.215",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.117",
+    "mac": "bc:22:28:95:ad:7f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.27",
+    "mac": "f6:6f:e0:e6:34:5e",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.170",
+    "mac": "04:bf:1b:8c:6f:4c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.155",
+    "mac": "38:8d:3d:ae:47:9c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.200",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.110",
+    "mac": "4a:5c:18:e8:53:5d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.12",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.140",
+    "mac": "9a:ce:b6:92:54:8f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.1.29",
+    "mac": "f8:54:f6:8e:04:bd",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.253",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.0.108",
+    "mac": "f4:3b:d8:c5:1f:ca",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.1",
+    "mac": "fe:db:9b:3c:88:7c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.129",
+    "mac": "bc:0f:f3:be:05:75",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.246",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.120",
+    "mac": "44:38:e8:3f:84:3c",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.39",
+    "mac": "04:95:e6:21:95:b0",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.20",
+    "mac": "0c:ef:15:e8:db:35",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.154",
+    "mac": "04:0e:3c:27:70:c2",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.107",
+    "mac": "78:98:e8:68:4f:cb",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.186",
+    "mac": "ae:64:b7:3b:f9:aa",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.10.10.20",
+    "mac": "c4:00:ad:9f:20:99",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.88",
+    "mac": "00:d0:0d:25:ba:24",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.235",
+    "mac": "38:ca:84:54:09:62",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.117",
+    "mac": "06:2c:01:2a:94:9e",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.216",
+    "mac": "50:bb:b5:45:68:ea",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.9",
+    "mac": "8c:90:2d:97:48:d8",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.151",
+    "mac": "0c:ef:15:e9:04:dc",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.251.64",
+    "mac": "00:e0:4c:3d:cc:cf",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.126",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.28",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.175",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.156",
+    "mac": "3e:a1:e7:41:bc:a9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.205",
+    "mac": "fe:da:08:ac:bc:a2",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.71.133",
+    "mac": "f4:4d:30:a9:f1:15",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.83",
+    "mac": "70:85:c2:3e:58:b0",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.2",
+    "mac": "ae:3f:5e:8e:c8:37",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.32",
+    "mac": "bc:22:28:95:af:89",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.115",
+    "mac": "bc:22:28:95:ad:7c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.17",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.160",
+    "mac": "c4:00:ad:9f:20:98",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.145",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.198",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "169.254.119.59",
+    "mac": "00:d0:0d:25:f0:12",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.104",
+    "mac": "50:bb:b5:45:ba:38",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.100",
+    "mac": "44:37:e6:47:d1:c8",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.10",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.255.12.149",
+    "mac": "cc:b6:c8:bb:13:17",
+    "interface": "Port2",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.123",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.138",
+    "mac": "a4:0c:66:24:b8:b8",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.251",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.101",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.40",
+    "mac": "9c:53:22:92:ff:be",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.191",
+    "mac": "e0:73:e7:19:e8:36",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.108",
+    "mac": "78:98:e8:68:4f:cc",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.236",
+    "mac": "00:d0:0d:25:f0:d2",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.209.112",
+    "mac": "c4:65:16:17:e6:8f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.114",
+    "mac": "00:e0:4c:e6:d5:fb",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.221",
+    "mac": "8c:32:23:4f:7c:1d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.156",
+    "mac": "64:49:7d:e7:e2:7b",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.176",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.225",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.214",
+    "mac": "c4:65:16:17:e6:8f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.7",
+    "mac": "48:ea:62:3c:bb:79",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.215.101",
+    "mac": "30:03:c8:f9:3a:85",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.116",
+    "mac": "9c:53:22:92:ff:be",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.26",
+    "mac": "be:2f:07:37:33:0c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.165",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.154",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.203",
+    "mac": "8c:32:23:53:a7:83",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.105",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.15",
+    "mac": "d8:12:65:0a:4f:0d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.124",
+    "mac": "3e:f3:99:3d:97:4a",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.143",
+    "mac": "34:6f:24:c8:a8:e3",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.1.65",
+    "mac": "44:38:e8:3f:a3:22",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.252",
+    "mac": "1a:f8:f4:51:c7:e9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.211.230",
+    "mac": "f8:54:f6:8d:67:97",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.45",
+    "mac": "30:03:c8:f9:3a:85",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.0",
+    "mac": "c4:00:ad:9f:20:99",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.108.186",
+    "mac": "00:d0:0d:25:f0:a7",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.128",
+    "mac": "bc:ea:fa:c6:13:2f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.0.160",
+    "mac": "88:ae:dd:86:c3:d7",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.241",
+    "mac": "f4:4d:30:a9:f1:15",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.38",
+    "mac": "04:7c:16:10:8d:76",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "182.65.36.1",
+    "mac": "40:8f:9d:83:1c:0e",
+    "interface": "Port5",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.23",
+    "mac": "00:d0:0d:25:df:68",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.181",
+    "mac": "60:57:18:f9:57:13",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.106",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.234",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.116",
+    "mac": "c8:15:4e:83:69:9f",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.219",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.8",
+    "mac": "5c:60:ba:a6:d8:10",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.150",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.121",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.31",
+    "mac": "aa:2e:a3:3e:d5:95",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.174",
+    "mac": "9c:53:22:93:0c:5f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.159",
+    "mac": "ce:20:91:2c:31:85",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.204",
+    "mac": "1c:4d:70:7d:ef:06",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.163",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.35",
+    "mac": "66:c5:c3:cd:c1:b1",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.114",
+    "mac": "b4:2e:99:46:0e:aa",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.16",
+    "mac": "0e:65:ca:c5:0e:44",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.163",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.144",
+    "mac": "98:03:8e:b3:c2:6c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.193",
+    "mac": "2c:58:b9:2f:d4:18",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.111",
+    "mac": "5c:28:86:1d:00:9f",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.103",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "172.20.10.2",
+    "mac": "1c:ce:51:7f:14:7a",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.5",
+    "mac": "b6:38:aa:c0:d8:b7",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.122",
+    "mac": "8c:88:2b:20:0a:d1",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.133",
+    "mac": "8c:32:23:37:c3:00",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.250",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.100",
+    "mac": "9c:53:22:92:ff:d7",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.43",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.190",
+    "mac": "5c:e0:c5:d0:42:1f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.239",
+    "mac": "ec:5c:68:b4:c9:e5",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.113",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.220",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "169.254.84.117",
+    "mac": "00:d0:0d:25:a8:5f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.160.175.104",
+    "mac": "44:38:e8:3f:a3:22",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.66",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.179",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.81",
+    "mac": "00:d0:0d:25:f1:11",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.224",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.209",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.6",
+    "mac": "bc:22:28:94:f1:01",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.119",
+    "mac": "bc:22:28:95:ad:7a",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.21",
+    "mac": "9e:73:e1:4b:fe:d9",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.164",
+    "mac": "74:8f:c2:82:d0:eb",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.149",
+    "mac": "26:f1:60:8f:e3:c8",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.202",
+    "mac": "1c:ce:51:7f:14:7a",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.104",
+    "mac": "50:03:cf:7a:1b:dc",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.246",
+    "mac": "40:c2:ba:bd:82:11",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.14",
+    "mac": "0a:67:60:0a:56:3b",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.1.46",
+    "mac": "80:99:e7:e2:6e:03",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.142",
+    "mac": "fa:fd:a4:50:ee:4d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.255",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.44",
+    "mac": "7a:8b:09:5d:04:5e",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.3",
+    "mac": "46:64:3f:cd:89:07",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.131",
+    "mac": "bc:22:28:95:af:21",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.240",
+    "mac": "00:d0:0d:25:df:48",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.126",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.22",
+    "mac": "00:d0:0d:25:f0:a7",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.180",
+    "mac": "7a:8b:09:5d:04:5e",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.229",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.218",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.149",
+    "mac": "0c:ef:15:e8:98:d7",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.120",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.30",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.169",
+    "mac": "14:13:33:9e:f2:23",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.55",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.1.62",
+    "mac": "68:a7:29:ec:2c:9e",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.158",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.207",
+    "mac": "9c:53:22:93:0b:6c",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.34",
+    "mac": "10:b1:df:bd:c6:f1",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.109",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.41.19",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.162",
+    "mac": "d0:57:7b:ce:fa:18",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.147",
+    "mac": "48:45:20:21:a1:5b",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.221.118",
+    "mac": "44:38:e8:3f:a4:94",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "169.254.220.246",
+    "mac": "00:e0:4c:e6:d5:fb",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.192",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.110",
+    "mac": "bc:ec:a0:3b:b9:e1",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.49",
+    "mac": "72:a7:d1:d4:d1:93",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.102",
+    "mac": "b8:1e:a4:18:7f:1f",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.4",
+    "mac": "5e:c3:08:a3:8a:81",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.132",
+    "mac": "64:49:7d:e3:04:3b",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.245",
+    "mac": "20:34:fb:82:44:85",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.123",
+    "mac": "",
+    "interface": "Port3",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.42",
+    "mac": "d8:5e:d3:2b:19:fd",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.200",
+    "mac": "00:18:ae:e3:7b:16",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.214",
+    "mac": "8c:32:23:37:c5:86",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.185",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.238",
+    "mac": "00:d0:0d:25:f0:9d",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "10.112.22.112",
+    "mac": "70:15:fb:10:9f:9b",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.223",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.12",
+    "mac": "04:95:e6:22:bc:68",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.41.50",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.125",
+    "mac": "00:db:df:95:96:88",
+    "interface": "Port1",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.178",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "10.112.22.60",
+    "mac": "7c:57:58:b8:9e:71",
+    "interface": "Port3",
+    "state": "Complete,Dynamic"
+  },
+  {
+    "ip": "192.168.40.227",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  },
+  {
+    "ip": "192.168.40.208",
+    "mac": "",
+    "interface": "Port1",
+    "state": "Incomplete"
+  }
+]

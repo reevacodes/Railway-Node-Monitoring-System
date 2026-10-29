@@ -1,0 +1,634 @@
+
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const pool = require('./db');
+const { execFile } = require('child_process');
+const net = require('net');
+
+const app = express();
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.text({ limit: '10mb' }));
+
+const macArpRouter = require('./mac_arp_routes');
+const discoveredRouter = require('./discovered_routes');
+const overviewRouter = require('./overview_routes');
+app.use('/', macArpRouter);
+app.use('/', discoveredRouter);
+app.use('/', overviewRouter);
+
+
+// --------------------------------------------------
+// 1. Health check
+// --------------------------------------------------
+app.get('/health', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT current_database() AS database'
+        );
+
+        res.json({
+            status: 'ok',
+            database: result.rows[0].database,
+        });
+    } catch (error) {
+        console.error('Health check failed:', error.message);
+
+        res.status(500).json({
+            error: 'Database connection failed',
+        });
+    }
+});
+
+// --------------------------------------------------
+// 2. Get all registered devices
+// --------------------------------------------------
+app.get('/devices', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM devices ORDER BY id'
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Fetch devices failed:', error.message);
+
+        res.status(500).json({
+            error: 'Could not fetch devices',
+        });
+    }
+});
+
+// --------------------------------------------------
+// 3. Register a new device (with physical location fields)
+// --------------------------------------------------
+app.post('/devices', async (req, res) => {
+    const {
+        name,
+        ip_address,
+        mac_address,
+        device_type,
+        notes,
+        building,
+        floor,
+        room,
+        rack,
+        rack_position,
+        port_number,
+        parent_device_id,
+        parent_device_name,
+        location_notes,
+        location_verification,
+    } = req.body;
+
+    if (
+        typeof name !== 'string' ||
+        !name.trim()
+    ) {
+        return res.status(400).json({
+            error: 'Device name is required',
+        });
+    }
+
+    const cleanIp = (typeof ip_address === 'string' && ip_address.trim()) ? ip_address.trim() : null;
+
+    const verificationStatus = ['verified', 'unverified', 'unknown'].includes(location_verification)
+        ? location_verification
+        : 'unverified';
+
+    const verifiedAt = verificationStatus === 'verified' ? new Date() : null;
+
+    try {
+        const result = await pool.query(
+            `INSERT INTO devices
+       (name, ip_address, mac_address, device_type, notes,
+        building, floor, room, rack, rack_position, port_number,
+        parent_device_id, parent_device_name, location_notes,
+        location_verification, location_verified_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       RETURNING *`,
+            [
+                name.trim(),
+                cleanIp,
+                mac_address ? mac_address.trim() : null,
+                device_type || null,
+                notes ? notes.trim() : null,
+                building ? building.trim() : null,
+                floor ? floor.trim() : null,
+                room ? room.trim() : null,
+                rack ? rack.trim() : null,
+                rack_position ? rack_position.trim() : null,
+                port_number ? port_number.trim() : null,
+                parent_device_id ? Number(parent_device_id) : null,
+                parent_device_name ? parent_device_name.trim() : null,
+                location_notes ? location_notes.trim() : null,
+                verificationStatus,
+                verifiedAt,
+            ]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({
+                error: 'A device with this IP address already exists',
+            });
+        }
+
+        console.error('Add device failed:', error.message);
+
+        res.status(500).json({
+            error: 'Could not add device',
+        });
+    }
+});
+
+// --------------------------------------------------
+// 3a. Get a single device by ID
+// --------------------------------------------------
+app.get('/devices/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({ error: 'Invalid device ID' });
+    }
+
+    try {
+        const result = await pool.query('SELECT * FROM devices WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Device not found' });
+        }
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Get device failed:', error.message);
+        res.status(500).json({ error: 'Could not fetch device' });
+    }
+});
+
+// --------------------------------------------------
+// 3b. Update device details & physical location
+// --------------------------------------------------
+app.put('/devices/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({ error: 'Invalid device ID' });
+    }
+
+    const {
+        name,
+        ip_address,
+        mac_address,
+        device_type,
+        notes,
+        building,
+        floor,
+        room,
+        rack,
+        rack_position,
+        port_number,
+        parent_device_id,
+        parent_device_name,
+        location_notes,
+        location_verification,
+    } = req.body;
+
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+        return res.status(400).json({
+            error: 'Device name cannot be empty',
+        });
+    }
+
+    try {
+        const existing = await pool.query('SELECT * FROM devices WHERE id = $1', [id]);
+        if (existing.rowCount === 0) {
+            return res.status(404).json({ error: 'Device not found' });
+        }
+        const curr = existing.rows[0];
+
+        const verificationStatus = location_verification !== undefined
+            ? (['verified', 'unverified', 'unknown'].includes(location_verification) ? location_verification : curr.location_verification)
+            : curr.location_verification;
+
+        let verifiedAt = curr.location_verified_at;
+        if (location_verification === 'verified' && curr.location_verification !== 'verified') {
+            verifiedAt = new Date();
+        } else if (location_verification === 'unverified' || location_verification === 'unknown') {
+            verifiedAt = null;
+        }
+
+        const cleanUpdateIp = ip_address !== undefined
+            ? ((typeof ip_address === 'string' && ip_address.trim()) ? ip_address.trim() : null)
+            : curr.ip_address;
+
+        const result = await pool.query(
+            `UPDATE devices SET
+                name = COALESCE($1, name),
+                ip_address = $2,
+                mac_address = $3,
+                device_type = $4,
+                notes = $5,
+                building = $6,
+                floor = $7,
+                room = $8,
+                rack = $9,
+                rack_position = $10,
+                port_number = $11,
+                parent_device_id = $12,
+                parent_device_name = $13,
+                location_notes = $14,
+                location_verification = $15,
+                location_verified_at = $16
+             WHERE id = $17
+             RETURNING *`,
+            [
+                name ? name.trim() : null,
+                cleanUpdateIp,
+                mac_address !== undefined ? (mac_address ? mac_address.trim() : null) : curr.mac_address,
+                device_type !== undefined ? device_type : curr.device_type,
+                notes !== undefined ? (notes ? notes.trim() : null) : curr.notes,
+                building !== undefined ? (building ? building.trim() : null) : curr.building,
+                floor !== undefined ? (floor ? floor.trim() : null) : curr.floor,
+                room !== undefined ? (room ? room.trim() : null) : curr.room,
+                rack !== undefined ? (rack ? rack.trim() : null) : curr.rack,
+                rack_position !== undefined ? (rack_position ? rack_position.trim() : null) : curr.rack_position,
+                port_number !== undefined ? (port_number ? port_number.trim() : null) : curr.port_number,
+                parent_device_id !== undefined ? (parent_device_id ? Number(parent_device_id) : null) : curr.parent_device_id,
+                parent_device_name !== undefined ? (parent_device_name ? parent_device_name.trim() : null) : curr.parent_device_name,
+                location_notes !== undefined ? (location_notes ? location_notes.trim() : null) : curr.location_notes,
+                verificationStatus,
+                verifiedAt,
+                id,
+            ]
+        );
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({
+                error: 'A device with this IP address already exists',
+            });
+        }
+        console.error('Update device failed:', error.message);
+        res.status(500).json({ error: 'Could not update device' });
+    }
+});
+
+// --------------------------------------------------
+// 3c. Quick verify physical location action
+// --------------------------------------------------
+app.post('/devices/:id/verify-location', async (req, res) => {
+    const id = Number(req.params.id);
+    const { status = 'verified' } = req.body;
+
+    if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({ error: 'Invalid device ID' });
+    }
+
+    const verifiedAt = status === 'verified' ? new Date() : null;
+
+    try {
+        const result = await pool.query(
+            `UPDATE devices SET
+                location_verification = $1,
+                location_verified_at = $2
+             WHERE id = $3
+             RETURNING *`,
+            [status, verifiedAt, id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Device not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Verify location failed:', error.message);
+        res.status(500).json({ error: 'Could not verify location' });
+    }
+});
+
+
+// --------------------------------------------------
+// 4. Manually record a status check
+// --------------------------------------------------
+app.post('/devices/:id/check', async (req, res) => {
+    const deviceId = Number(req.params.id);
+    const { status, latency_ms } = req.body;
+
+    if (!Number.isInteger(deviceId) || deviceId < 1) {
+        return res.status(400).json({
+            error: 'Invalid device ID',
+        });
+    }
+
+    if (!['online', 'offline', 'unknown'].includes(status)) {
+        return res.status(400).json({
+            error: 'Status must be online, offline, or unknown',
+        });
+    }
+
+    if (
+        latency_ms !== undefined &&
+        latency_ms !== null &&
+        (!Number.isInteger(latency_ms) || latency_ms < 0)
+    ) {
+        return res.status(400).json({
+            error: 'Latency must be a non-negative integer or null',
+        });
+    }
+
+    try {
+        const device = await pool.query(
+            'SELECT id FROM devices WHERE id = $1',
+            [deviceId]
+        );
+
+        if (device.rowCount === 0) {
+            return res.status(404).json({
+                error: 'Device not found',
+            });
+        }
+
+        const savedLatency =
+            status === 'online' ? (latency_ms ?? null) : null;
+
+        const result = await pool.query(
+            `INSERT INTO status_history
+       (device_id, status, latency_ms)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+            [deviceId, status, savedLatency]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Save status failed:', error.message);
+
+        res.status(500).json({
+            error: 'Could not save status check',
+        });
+    }
+});
+
+// --------------------------------------------------
+// 5. Get status history for a device
+// --------------------------------------------------
+app.get('/devices/:id/history', async (req, res) => {
+    const deviceId = Number(req.params.id);
+
+    if (!Number.isInteger(deviceId) || deviceId < 1) {
+        return res.status(400).json({
+            error: 'Invalid device ID',
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            `SELECT id, device_id, status, checked_at, latency_ms
+       FROM status_history
+       WHERE device_id = $1
+       ORDER BY checked_at DESC, id DESC`,
+            [deviceId]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Fetch history failed:', error.message);
+
+        res.status(500).json({
+            error: 'Could not fetch status history',
+        });
+    }
+});
+
+// --------------------------------------------------
+// 6. Delete a registered device
+// --------------------------------------------------
+app.delete('/devices/:id', async (req, res) => {
+    const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({
+            error: 'Invalid device ID',
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            'DELETE FROM devices WHERE id = $1 RETURNING id',
+            [id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                error: 'Device not found',
+            });
+        }
+
+        res.json({
+            message: 'Device deleted',
+            id,
+        });
+    } catch (error) {
+        console.error('Delete device failed:', error.message);
+
+        res.status(500).json({
+            error: 'Could not delete device',
+        });
+    }
+});
+
+// --------------------------------------------------
+// 7. Real ping monitoring (Windows)
+// --------------------------------------------------
+
+const CHECK_INTERVAL_MS = 30_000;
+let monitoringInProgress = false;
+
+function pingDevice(ipAddress) {
+    return new Promise((resolve) => {
+        if (
+            typeof ipAddress !== 'string' ||
+            !net.isIP(ipAddress.trim())
+        ) {
+            return resolve({
+                status: 'unknown',
+                latency_ms: null,
+                reason: 'Invalid IP address',
+            });
+        }
+
+        const target = ipAddress.trim();
+
+        execFile(
+            'ping',
+            ['-n', '1', '-w', '1500', target],
+            { timeout: 4000, windowsHide: true },
+            (error, stdout, stderr) => {
+                const output = `${stdout || ''}\n${stderr || ''}`;
+
+                if (error) {
+                    const noReply =
+                        /timed out|request timed out|destination host unreachable|could not find host|general failure/i.test(
+                            output
+                        );
+
+                    return resolve({
+                        status: noReply ? 'offline' : 'unknown',
+                        latency_ms: null,
+                        reason: noReply
+                            ? 'No ping reply'
+                            : error.message || 'Ping command failed',
+                    });
+                }
+
+                const match = output.match(/time[=<]\s*(\d+)\s*ms/i);
+
+                if (/TTL\s*=/i.test(output)) {
+                    return resolve({
+                        status: 'online',
+                        latency_ms: match ? Number(match[1]) : null,
+                        reason: 'Ping reply received',
+                    });
+                }
+
+                return resolve({
+                    status: 'unknown',
+                    latency_ms: null,
+                    reason: 'Could not confirm a ping reply',
+                });
+            }
+        );
+    });
+}
+
+async function runMonitoringCycle() {
+    if (monitoringInProgress) {
+        console.log('Previous cycle still running; skipping this cycle.');
+        return;
+    }
+
+    monitoringInProgress = true;
+
+    try {
+        console.log('\n--- Automatic real ping monitoring cycle started ---');
+
+        const devicesResult = await pool.query(
+            'SELECT id, name, ip_address FROM devices ORDER BY id'
+        );
+
+        const devices = devicesResult.rows;
+
+        if (devices.length === 0) {
+            console.log('No registered devices to check.');
+            return;
+        }
+
+        const BATCH_SIZE = 6;
+        for (let i = 0; i < devices.length; i += BATCH_SIZE) {
+            const batch = devices.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async (device) => {
+                if (!device.ip_address) {
+                    // Device pending IP discovery from firewall
+                    return;
+                }
+                const check = await pingDevice(device.ip_address);
+                const status = check.status;
+                const latency = check.latency_ms;
+
+                try {
+                    await pool.query(
+                        `INSERT INTO status_history
+               (device_id, status, latency_ms)
+               VALUES ($1, $2, $3)`,
+                        [
+                            device.id,
+                            status,
+                            status === 'online' ? latency : null,
+                        ]
+                    );
+
+                    console.log(
+                        `${device.name} (${device.ip_address}) -> ${status}` +
+                        (latency !== null ? `, latency: ${latency} ms` : '') +
+                        (check.reason ? ` [${check.reason}]` : '')
+                    );
+                } catch (error) {
+                    console.error(
+                        `Failed to save status for device ${device.id}:`,
+                        error.message
+                    );
+                }
+            }));
+        }
+
+        console.log('--- Automatic real ping monitoring cycle completed ---');
+    } catch (error) {
+        console.error('Monitoring cycle failed:', error.message);
+    } finally {
+        monitoringInProgress = false;
+    }
+}
+
+// --------------------------------------------------
+// Start the API and monitoring scheduler
+// --------------------------------------------------
+
+const port = Number(process.env.PORT || 5001);
+
+const server = app.listen(port, () => {
+    console.log(`Network Monitor API running at http://localhost:${port}`);
+    console.log('Automatic real ping monitoring: every 30 seconds.');
+
+    runMonitoringCycle();
+    setInterval(runMonitoringCycle, CHECK_INTERVAL_MS);
+
+    const { startDiscoveredPingScheduler, stopDiscoveredPingScheduler } = require('./discovered_ping_service');
+    startDiscoveredPingScheduler();
+
+    const { startArpPollingScheduler, stopArpPollingScheduler } = require('./sophos_arp_service');
+    startArpPollingScheduler();
+});
+
+// --------------------------------------------------
+// Graceful shutdown
+// --------------------------------------------------
+
+let shuttingDown = false;
+
+function shutdown() {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    console.log('\nShutting down Network Monitor API...');
+
+    try {
+        const { stopDiscoveredPingScheduler } = require('./discovered_ping_service');
+        stopDiscoveredPingScheduler();
+    } catch (e) {
+        // ignore
+    }
+
+    try {
+        const { stopArpPollingScheduler } = require('./sophos_arp_service');
+        stopArpPollingScheduler();
+    } catch (e) {
+        // ignore
+    }
+
+    server.close(async () => {
+        try {
+            await pool.end();
+            console.log('Database connections closed.');
+            process.exit(0);
+        } catch (error) {
+            console.error('Shutdown error:', error.message);
+            process.exit(1);
+        }
+    });
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
