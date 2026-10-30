@@ -285,8 +285,11 @@ export const DeviceInventory = () => {
 
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
+            type="button"
             className="btn btn-primary btn-sm"
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               setDeviceToEdit(null);
               setIsAddModalOpen(true);
             }}
@@ -508,8 +511,11 @@ export const DeviceInventory = () => {
               action={
                 devices.length === 0 ? (
                   <button
+                    type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setDeviceToEdit(null);
                       setIsAddModalOpen(true);
                     }}
@@ -735,6 +741,7 @@ export const DeviceInventory = () => {
         isOpen={!!selectedDevice}
         onClose={() => setSelectedDevice(null)}
         onEditDevice={(dev) => {
+          setSelectedDevice(null);
           setDeviceToEdit(dev);
           setIsAddModalOpen(true);
         }}

@@ -23,12 +23,14 @@ import {
   AlertTriangle,
   Clock,
   Layers,
+  Plus,
 } from 'lucide-react';
 
 export const NetworkTopology = () => {
   const { devices, deviceStatuses } = useNetwork();
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [deviceToEdit, setDeviceToEdit] = useState(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [locationFilter, setLocationFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE' | 'RECENT'
 
@@ -157,6 +159,19 @@ export const NetworkTopology = () => {
               ))}
             </select>
           </div>
+
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDeviceToEdit(null);
+              setIsAddModalOpen(true);
+            }}
+          >
+            <Plus size={14} /> Register Node
+          </button>
         </div>
       </div>
 
@@ -223,6 +238,20 @@ export const NetworkTopology = () => {
             <EmptyState
               title="No Network Nodes to Display"
               description="Register railway routers, switches, and access points in Device Inventory to generate the topology map."
+              action={
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDeviceToEdit(null);
+                    setIsAddModalOpen(true);
+                  }}
+                >
+                  <Plus size={13} /> Register First Device
+                </button>
+              }
             />
           </div>
         </div>
@@ -462,14 +491,19 @@ export const NetworkTopology = () => {
         isOpen={!!selectedDevice}
         onClose={() => setSelectedDevice(null)}
         onEditDevice={(dev) => {
+          setSelectedDevice(null);
           setDeviceToEdit(dev);
+          setIsAddModalOpen(true);
         }}
       />
 
-      {/* Edit Modal if triggered from drawer */}
+      {/* Add / Edit Modal */}
       <DeviceFormModal
-        isOpen={!!deviceToEdit}
-        onClose={() => setDeviceToEdit(null)}
+        isOpen={isAddModalOpen || !!deviceToEdit}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setDeviceToEdit(null);
+        }}
         initialDevice={deviceToEdit}
       />
     </div>

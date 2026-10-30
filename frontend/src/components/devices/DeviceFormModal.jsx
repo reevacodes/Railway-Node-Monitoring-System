@@ -457,7 +457,16 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         </div>
 
         <div className="modal-footer" style={{ margin: '18px -18px -18px -18px' }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose?.();
+            }}
+            disabled={isSubmitting}
+          >
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={isSubmitting}>

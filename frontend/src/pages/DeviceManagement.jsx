@@ -66,8 +66,11 @@ export const DeviceManagement = () => {
         </div>
 
         <button
+          type="button"
           className="btn btn-primary btn-sm"
-          onClick={() => {
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
             setDeviceToEdit(null);
             setIsAddModalOpen(true);
           }}
@@ -114,8 +117,11 @@ export const DeviceManagement = () => {
               description="Get started by registering railway trackside or NOC devices."
               action={
                 <button
+                  type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     setDeviceToEdit(null);
                     setIsAddModalOpen(true);
                   }}
@@ -171,9 +177,12 @@ export const DeviceManagement = () => {
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '5px' }}>
                           <button
+                            type="button"
                             className="btn btn-secondary btn-sm"
                             title="Edit Node & Location"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               setDeviceToEdit(dev);
                               setIsAddModalOpen(true);
                             }}
