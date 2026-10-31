@@ -365,13 +365,17 @@ router.post('/api/discovered-devices/:id/register', async (req, res) => {
       if (existingDev.rows.length > 0) {
         registeredDevId = existingDev.rows[0].id;
       } else {
+        let autoOffice = 'DRM';
+        if (item.ip_address && item.ip_address.startsWith('192.168.41.')) autoOffice = 'NIA';
+        else if (building && (building.toLowerCase().includes('control') || building.toLowerCase().includes('cabin'))) autoOffice = 'CONTROL';
+
         // Insert new row in `devices`
         const insertDev = await client.query(
           `INSERT INTO devices
-            (name, ip_address, mac_address, device_type, building, notes)
-           VALUES ($1, $2, $3, $4, $5, $6)
+            (name, ip_address, mac_address, device_type, building, notes, office)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id`,
-          [devName, item.ip_address, item.mac_address, devType, building, notes]
+          [devName, item.ip_address, item.mac_address, devType, building, notes, autoOffice]
         );
         registeredDevId = insertDev.rows[0].id;
       }

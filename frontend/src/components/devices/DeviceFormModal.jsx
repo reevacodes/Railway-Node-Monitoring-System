@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../common/Modal';
 import { useNetwork } from '../../context/NetworkContext';
-import { MapPin, Server, Network, CheckCircle2, Info } from 'lucide-react';
+import { MapPin, Server, Network, CheckCircle2, Info, Building2 } from 'lucide-react';
 
 const DEVICE_TYPES = [
   'PC',
@@ -50,6 +50,7 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
     mac_address: '',
     device_type: 'Router',
     notes: '',
+    office: 'DRM',
     building: '',
     floor: '',
     room: '',
@@ -63,6 +64,7 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -73,6 +75,10 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         mac_address: initialDevice.mac_address || '',
         device_type: initialDevice.device_type || 'Router',
         notes: initialDevice.notes || '',
+        office: initialDevice.office || (
+          (initialDevice.ip_address && initialDevice.ip_address.startsWith('192.168.41.')) ? 'NIA' :
+          (initialDevice.building && initialDevice.building.toLowerCase().includes('control')) ? 'CONTROL' : 'DRM'
+        ),
         building: initialDevice.building || '',
         floor: initialDevice.floor || '',
         room: initialDevice.room || '',
@@ -91,6 +97,7 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         mac_address: '',
         device_type: 'Router',
         notes: '',
+        office: 'DRM',
         building: '',
         floor: '',
         room: '',
@@ -104,6 +111,7 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
       });
     }
     setErrorMsg('');
+    isSubmittingRef.current = false;
   }, [initialDevice, isOpen]);
 
   const handleChange = (e) => {
@@ -126,12 +134,20 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+
+    // Prevent duplicate concurrent submissions
+    if (isSubmittingRef.current || isSubmitting) return;
+
     if (!formData.name.trim()) {
       setErrorMsg('Device name is required');
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
+    setErrorMsg('');
+
     try {
       const payload = {
         name: formData.name.trim(),
@@ -139,6 +155,7 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         mac_address: formData.mac_address.trim() || null,
         device_type: formData.device_type,
         notes: formData.notes.trim() || null,
+        office: formData.office || 'DRM',
         building: formData.building.trim() || null,
         floor: formData.floor.trim() || null,
         room: formData.room.trim() || null,
@@ -156,10 +173,12 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
       } else {
         await addDevice(payload);
       }
-      onClose();
+      // Only close on verified success
+      onClose?.();
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save device information');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -293,12 +312,32 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
             }}
           >
             <MapPin size={13} style={{ color: '#059669' }} />
-            <span>2. Physical Location Hierarchy (Optional)</span>
+            <span>2. Railway Office Division & Physical Location</span>
+          </div>
+
+          {/* Dedicated Railway Office Branch Assignment */}
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label className="form-label" style={{ fontWeight: 600 }}>
+              Railway Office Division <span className="required">*</span>
+            </label>
+            <select
+              name="office"
+              className="form-select"
+              value={formData.office}
+              onChange={handleChange}
+              style={{ fontWeight: 500 }}
+              required
+            >
+              <option value="DRM">DRM Office (Divisional HQ / Core Infrastructure)</option>
+              <option value="CONTROL">Control Office (Train Dispatch & Section Operations)</option>
+              <option value="NIA">NIA Office (Telecom Substation & Fiber Aggregation)</option>
+            </select>
+            <div className="form-hint">Assigns node directly to its official branch on the Railway Network Topology tree.</div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group" style={{ marginBottom: '8px' }}>
-              <label className="form-label">Building / Office</label>
+              <label className="form-label">Building / Campus</label>
               <input
                 type="text"
                 name="building"

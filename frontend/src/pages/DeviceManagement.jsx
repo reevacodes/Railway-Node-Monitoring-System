@@ -137,6 +137,7 @@ export const DeviceManagement = () => {
                   <tr>
                     <th style={{ width: '45px' }}>ID</th>
                     <th>Device Name</th>
+                    <th>Office</th>
                     <th>Hardware Role</th>
                     <th>Target IP Address</th>
                     <th>MAC Interface</th>
@@ -153,6 +154,43 @@ export const DeviceManagement = () => {
                         #{dev.id}
                       </td>
                       <td style={{ fontWeight: 600 }}>{dev.name}</td>
+                      <td>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            background:
+                              dev.office === 'DRM'
+                                ? '#eff6ff'
+                                : dev.office === 'CONTROL'
+                                ? '#ecfdf5'
+                                : dev.office === 'NIA'
+                                ? '#fef3c7'
+                                : '#f1f5f9',
+                            color:
+                              dev.office === 'DRM'
+                                ? '#1d4ed8'
+                                : dev.office === 'CONTROL'
+                                ? '#047857'
+                                : dev.office === 'NIA'
+                                ? '#b45309'
+                                : '#64748b',
+                            border: `1px solid ${
+                              dev.office === 'DRM'
+                                ? '#bfdbfe'
+                                : dev.office === 'CONTROL'
+                                ? '#a7f3d0'
+                                : dev.office === 'NIA'
+                                ? '#fde68a'
+                                : '#cbd5e1'
+                            }`,
+                          }}
+                        >
+                          {dev.office || 'DRM'}
+                        </span>
+                      </td>
                       <td>
                         <DeviceTypeBadge type={dev.device_type} />
                       </td>

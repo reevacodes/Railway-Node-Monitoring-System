@@ -47,6 +47,7 @@ export const DeviceInventory = () => {
   // Filters
   const [quickFilter, setQuickFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE' | 'RECENT'
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [officeFilter, setOfficeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [buildingFilter, setBuildingFilter] = useState('ALL');
   const [verificationFilter, setVerificationFilter] = useState('ALL');
@@ -167,6 +168,15 @@ export const DeviceInventory = () => {
           devTypeLower === filterTypeLower ||
           (filterTypeLower === 'pc' && (devTypeLower.includes('pc') || devTypeLower.includes('workstation')));
         if (!matchesType) return false;
+      }
+
+      // 2b. Railway Office Division Match
+      if (officeFilter !== 'ALL') {
+        const devOff = (dev.office || (
+          (dev.ip_address && dev.ip_address.startsWith('192.168.41.')) ? 'NIA' :
+          (dev.building && dev.building.toLowerCase().includes('control')) ? 'CONTROL' : 'DRM'
+        )).toUpperCase();
+        if (devOff !== officeFilter) return false;
       }
 
       // 3. Building / Office Location Match
@@ -450,6 +460,19 @@ export const DeviceInventory = () => {
               ))}
             </select>
 
+            {/* Railway Office Division Filter */}
+            <select
+              className="filter-select"
+              value={officeFilter}
+              onChange={(e) => setOfficeFilter(e.target.value)}
+              style={{ fontWeight: 600 }}
+            >
+              <option value="ALL">All Offices (DRM, Control, NIA)</option>
+              <option value="DRM">DRM Office</option>
+              <option value="CONTROL">Control Office</option>
+              <option value="NIA">NIA Office</option>
+            </select>
+
             {/* Reachability Status Filter */}
             <select
               className="filter-select"
@@ -617,6 +640,20 @@ export const DeviceInventory = () => {
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontWeight: 600 }}>{dev.name}</span>
+                            <span
+                              style={{
+                                fontSize: '9px',
+                                padding: '1px 5px',
+                                backgroundColor: dev.office === 'NIA' ? '#ede9fe' : dev.office === 'CONTROL' ? '#ecfdf5' : '#e0f2fe',
+                                color: dev.office === 'NIA' ? '#7c3aed' : dev.office === 'CONTROL' ? '#059669' : '#0284c7',
+                                border: `1px solid ${dev.office === 'NIA' ? '#ddd6fe' : dev.office === 'CONTROL' ? '#a7f3d0' : '#bae6fd'}`,
+                                borderRadius: '3px',
+                                fontWeight: 700,
+                              }}
+                              title={`Railway Office Branch: ${dev.office || 'DRM'}`}
+                            >
+                              {dev.office || 'DRM'}
+                            </span>
                             {isRecent && (
                               <span
                                 style={{

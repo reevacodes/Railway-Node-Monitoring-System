@@ -1,4 +1,4 @@
-﻿
+
 require('dotenv').config();
 
 const express = require('express');
@@ -83,6 +83,7 @@ app.post('/devices', async (req, res) => {
         parent_device_name,
         location_notes,
         location_verification,
+        office,
     } = req.body;
 
     if (
@@ -108,8 +109,8 @@ app.post('/devices', async (req, res) => {
        (name, ip_address, mac_address, device_type, notes,
         building, floor, room, rack, rack_position, port_number,
         parent_device_id, parent_device_name, location_notes,
-        location_verification, location_verified_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        location_verification, location_verified_at, office)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING *`,
             [
                 name.trim(),
@@ -128,6 +129,7 @@ app.post('/devices', async (req, res) => {
                 location_notes ? location_notes.trim() : null,
                 verificationStatus,
                 verifiedAt,
+                office ? office.trim().toUpperCase() : 'DRM',
             ]
         );
 
@@ -193,6 +195,7 @@ app.put('/devices/:id', async (req, res) => {
         parent_device_name,
         location_notes,
         location_verification,
+        office,
     } = req.body;
 
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
@@ -240,8 +243,9 @@ app.put('/devices/:id', async (req, res) => {
                 parent_device_name = $13,
                 location_notes = $14,
                 location_verification = $15,
-                location_verified_at = $16
-             WHERE id = $17
+                location_verified_at = $16,
+                office = COALESCE($17, office)
+             WHERE id = $18
              RETURNING *`,
             [
                 name ? name.trim() : null,
@@ -260,6 +264,7 @@ app.put('/devices/:id', async (req, res) => {
                 location_notes !== undefined ? (location_notes ? location_notes.trim() : null) : curr.location_notes,
                 verificationStatus,
                 verifiedAt,
+                office !== undefined ? (office ? office.trim().toUpperCase() : curr.office) : curr.office,
                 id,
             ]
         );
