@@ -24,13 +24,24 @@ class ApiService {
   }
 
   async request(path, options = {}, key = null) {
+    let controller = null;
+    let timeoutId = null;
+
     if (key) {
       this.cancelRequest(key);
-      const controller = new AbortController();
+      controller = new AbortController();
       this.abortControllers.set(key, controller);
-      options.signal = controller.signal;
+    } else {
+      controller = new AbortController();
     }
 
+    timeoutId = setTimeout(() => {
+      try {
+        controller.abort();
+      } catch (_) {}
+    }, 8000);
+
+    const signal = options.signal || controller.signal;
     const url = this.getEndpoint(path);
     const headers = {
       'Content-Type': 'application/json',
@@ -38,7 +49,8 @@ class ApiService {
     };
 
     try {
-      const response = await fetch(url, { ...options, headers });
+      const response = await fetch(url, { ...options, headers, signal });
+      clearTimeout(timeoutId);
       if (key) {
         this.abortControllers.delete(key);
       }
@@ -58,11 +70,12 @@ class ApiService {
 
       return await response.json();
     } catch (err) {
+      clearTimeout(timeoutId);
       if (key) {
         this.abortControllers.delete(key);
       }
       if (err.name === 'AbortError') {
-        throw new Error('Request cancelled');
+        throw new Error('Request timed out or cancelled');
       }
       throw err;
     }
