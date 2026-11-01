@@ -47,7 +47,6 @@ export const DeviceInventory = () => {
   // Filters
   const [quickFilter, setQuickFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE' | 'RECENT'
   const [typeFilter, setTypeFilter] = useState('ALL');
-  const [officeFilter, setOfficeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [buildingFilter, setBuildingFilter] = useState('ALL');
   const [verificationFilter, setVerificationFilter] = useState('ALL');
@@ -170,15 +169,6 @@ export const DeviceInventory = () => {
         if (!matchesType) return false;
       }
 
-      // 2b. Railway Office Division Match
-      if (officeFilter !== 'ALL') {
-        const devOff = (dev.office || (
-          (dev.ip_address && dev.ip_address.startsWith('192.168.41.')) ? 'NIA' :
-          (dev.building && dev.building.toLowerCase().includes('control')) ? 'CONTROL' : 'DRM'
-        )).toUpperCase();
-        if (devOff !== officeFilter) return false;
-      }
-
       // 3. Building / Office Location Match
       if (buildingFilter !== 'ALL') {
         const matchesBuilding = dev.building === buildingFilter || dev.room === buildingFilter;
@@ -295,11 +285,8 @@ export const DeviceInventory = () => {
 
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
-            type="button"
             className="btn btn-primary btn-sm"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
+            onClick={() => {
               setDeviceToEdit(null);
               setIsAddModalOpen(true);
             }}
@@ -460,19 +447,6 @@ export const DeviceInventory = () => {
               ))}
             </select>
 
-            {/* Railway Office Division Filter */}
-            <select
-              className="filter-select"
-              value={officeFilter}
-              onChange={(e) => setOfficeFilter(e.target.value)}
-              style={{ fontWeight: 600 }}
-            >
-              <option value="ALL">All Offices (DRM, Control, NIA)</option>
-              <option value="DRM">DRM Office</option>
-              <option value="CONTROL">Control Office</option>
-              <option value="NIA">NIA Office</option>
-            </select>
-
             {/* Reachability Status Filter */}
             <select
               className="filter-select"
@@ -534,11 +508,8 @@ export const DeviceInventory = () => {
               action={
                 devices.length === 0 ? (
                   <button
-                    type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
+                    onClick={() => {
                       setDeviceToEdit(null);
                       setIsAddModalOpen(true);
                     }}
@@ -640,20 +611,6 @@ export const DeviceInventory = () => {
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontWeight: 600 }}>{dev.name}</span>
-                            <span
-                              style={{
-                                fontSize: '9px',
-                                padding: '1px 5px',
-                                backgroundColor: dev.office === 'NIA' ? '#ede9fe' : dev.office === 'CONTROL' ? '#ecfdf5' : '#e0f2fe',
-                                color: dev.office === 'NIA' ? '#7c3aed' : dev.office === 'CONTROL' ? '#059669' : '#0284c7',
-                                border: `1px solid ${dev.office === 'NIA' ? '#ddd6fe' : dev.office === 'CONTROL' ? '#a7f3d0' : '#bae6fd'}`,
-                                borderRadius: '3px',
-                                fontWeight: 700,
-                              }}
-                              title={`Railway Office Branch: ${dev.office || 'DRM'}`}
-                            >
-                              {dev.office || 'DRM'}
-                            </span>
                             {isRecent && (
                               <span
                                 style={{
@@ -675,7 +632,7 @@ export const DeviceInventory = () => {
                           <DeviceTypeBadge type={dev.device_type} />
                         </td>
                         <td>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span className="mono" style={{ fontWeight: 600, color: '#0284c7' }}>
                               {dev.ip_address}
                             </span>
@@ -684,6 +641,35 @@ export const DeviceInventory = () => {
                                 {dev.mac_address}
                               </span>
                             )}
+                            {dev.matched_subnet ? (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  color: '#0369a1',
+                                  backgroundColor: '#e0f2fe',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  width: 'fit-content',
+                                  fontWeight: 500,
+                                }}
+                                title={`${dev.matched_office?.office_name || ''} - ${dev.matched_subnet.subnet_name}`}
+                              >
+                                {dev.matched_office?.office_code || 'OFFICE'}: {dev.matched_subnet.cidr_prefix}
+                              </span>
+                            ) : dev.ip_address ? (
+                              <span
+                                style={{
+                                  fontSize: '9.5px',
+                                  color: '#64748b',
+                                  backgroundColor: '#f1f5f9',
+                                  padding: '1px 4px',
+                                  borderRadius: '3px',
+                                  width: 'fit-content',
+                                }}
+                              >
+                                Unassigned Net
+                              </span>
+                            ) : null}
                           </div>
                         </td>
                         {/* Compact Location display */}
@@ -778,7 +764,6 @@ export const DeviceInventory = () => {
         isOpen={!!selectedDevice}
         onClose={() => setSelectedDevice(null)}
         onEditDevice={(dev) => {
-          setSelectedDevice(null);
           setDeviceToEdit(dev);
           setIsAddModalOpen(true);
         }}

@@ -17,15 +17,26 @@ const fs = require('fs');
 const path = require('path');
 const net = require('net');
 const pool = require('./db');
-const { importArpSnapshot, getLatestSnapshotSummary } = require('./arp_importer');
-const { normalizeMac, formatMac } = require('./inventory_service');
+const { importArpSnapshot, getLatestSnapshotSummary } = require('./arp_importer');  // Functions for importing ARP snapshots and retrieving the latest snapshot summary
+const { normalizeMac, formatMac } = require('./inventory_service'); // 
 
 let playwrightChromium = null;
 try {
   const pw = require('../sophos-arp-test/node_modules/playwright');
   playwrightChromium = pw.chromium;
-} catch (e) {
-  // Will be handled gracefully if live browser extraction is attempted
+} catch (e1) {
+  try {
+    const pw = require('playwright');
+    playwrightChromium = pw.chromium;
+  } catch (e2) {
+    try {
+      const fallbackPath = 'C:/Projects/Railway Node monitoring System/sophos-arp-test/node_modules/playwright';
+      const pw = require(fallbackPath);
+      playwrightChromium = pw.chromium;
+    } catch (e3) {
+      // Will be handled gracefully if live browser extraction is attempted
+    }
+  }
 }
 
 let isArpPollingInProgress = false;
@@ -45,7 +56,9 @@ const CONFIG = {
   sophosUrl: process.env.SOPHOS_URL,
   sophosUsername: process.env.SOPHOS_USERNAME,
   sophosPassword: process.env.SOPHOS_PASSWORD,
-  profilePath: path.resolve(__dirname, '../sophos-arp-test/sophos-profile'),
+  profilePath: fs.existsSync(path.resolve(__dirname, '../sophos-arp-test/sophos-profile'))
+    ? path.resolve(__dirname, '../sophos-arp-test/sophos-profile')
+    : 'C:/Projects/Railway Node monitoring System/sophos-arp-test/sophos-profile',
   minValidEntries: 10
 };
 
@@ -69,6 +82,7 @@ const MAX_PAGES = 50;
  * @returns {{ valid: boolean, errors: string[], stats: object }}
  */
 function validateExtractedSnapshot(entries) {
+  console.log("validate Extracted Snapshots");
   const errors = [];
   if (!Array.isArray(entries)) {
     return { valid: false, errors: ['Extracted snapshot payload is not an array'], stats: null };
@@ -420,6 +434,7 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
  * @returns {Promise<object>} Cycle outcome
  */
 async function runArpPollingCycle(options = {}) {
+  console.log("inside runArpPollingCycle")
   if (isArpPollingInProgress) {
     console.log('[SophosPoller] Previous ARP polling cycle still running; skipping cycle.');
     return { skipped: true, reason: 'Already in progress' };

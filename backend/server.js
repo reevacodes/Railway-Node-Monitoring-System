@@ -7,6 +7,7 @@ const pool = require('./db');
 const { execFile } = require('child_process');
 const net = require('net');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
@@ -17,9 +18,13 @@ app.use(express.text({ limit: '10mb' }));
 const macArpRouter = require('./mac_arp_routes');
 const discoveredRouter = require('./discovered_routes');
 const overviewRouter = require('./overview_routes');
+const subnetRouter = require('./subnet_routes');
+const { matchIpToSubnets } = require('./subnet_util');
+
 app.use('/', macArpRouter);
 app.use('/', discoveredRouter);
 app.use('/', overviewRouter);
+app.use('/', subnetRouter);
 
 
 // --------------------------------------------------
@@ -45,15 +50,60 @@ app.get('/health', async (req, res) => {
 });
 
 // --------------------------------------------------
-// 2. Get all registered devices
+// 2. Get all registered devices (with automatic office & subnet classification)
 // --------------------------------------------------
 app.get('/devices', async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT * FROM devices ORDER BY id'
-        );
+        const [devicesResult, activeSubnetsRes] = await Promise.all([
+            pool.query('SELECT * FROM devices ORDER BY id'),
+            pool.query(`
+                SELECT s.*, o.name AS office_name, o.code AS office_code
+                FROM subnets s
+                JOIN offices o ON o.id = s.office_id
+                WHERE s.is_active = TRUE
+                ORDER BY s.cidr_prefix DESC
+            `),
+        ]);
 
-        res.json(result.rows);
+        const activeSubnets = activeSubnetsRes.rows;
+        const enriched = devicesResult.rows.map((device) => {
+            if (!device.ip_address || !device.ip_address.trim()) {
+                return {
+                    ...device,
+                    matched_office: null,
+                    matched_subnet: null,
+                    network_classification: 'Unassigned / No IP',
+                };
+            }
+            const match = matchIpToSubnets(device.ip_address, activeSubnets);
+            if (match) {
+                return {
+                    ...device,
+                    matched_office: {
+                        id: match.office_id,
+                        name: match.office_name,
+                        code: match.office_code,
+                    },
+                    matched_subnet: {
+                        id: match.id,
+                        name: match.subnet_name,
+                        network_address: match.network_address,
+                        cidr_prefix: match.cidr_prefix,
+                        subnet_mask: match.subnet_mask,
+                        usable_ip_range: match.usableIpRange,
+                    },
+                    network_classification: `${match.office_name} (${match.network_address}/${match.cidr_prefix})`,
+                };
+            }
+            return {
+                ...device,
+                matched_office: null,
+                matched_subnet: null,
+                network_classification: 'Unassigned / Unknown Network',
+            };
+        });
+
+        res.json(enriched);
     } catch (error) {
         console.error('Fetch devices failed:', error.message);
 
@@ -83,7 +133,6 @@ app.post('/devices', async (req, res) => {
         parent_device_name,
         location_notes,
         location_verification,
-        office,
     } = req.body;
 
     if (
@@ -109,8 +158,8 @@ app.post('/devices', async (req, res) => {
        (name, ip_address, mac_address, device_type, notes,
         building, floor, room, rack, rack_position, port_number,
         parent_device_id, parent_device_name, location_notes,
-        location_verification, location_verified_at, office)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        location_verification, location_verified_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
             [
                 name.trim(),
@@ -129,7 +178,6 @@ app.post('/devices', async (req, res) => {
                 location_notes ? location_notes.trim() : null,
                 verificationStatus,
                 verifiedAt,
-                office ? office.trim().toUpperCase() : 'DRM',
             ]
         );
 
@@ -159,11 +207,53 @@ app.get('/devices/:id', async (req, res) => {
     }
 
     try {
-        const result = await pool.query('SELECT * FROM devices WHERE id = $1', [id]);
-        if (result.rowCount === 0) {
+        const [devRes, activeSubnetsRes] = await Promise.all([
+            pool.query('SELECT * FROM devices WHERE id = $1', [id]),
+            pool.query(`
+                SELECT s.*, o.name AS office_name, o.code AS office_code
+                FROM subnets s
+                JOIN offices o ON o.id = s.office_id
+                WHERE s.is_active = TRUE
+                ORDER BY s.cidr_prefix DESC
+            `),
+        ]);
+
+        if (devRes.rowCount === 0) {
             return res.status(404).json({ error: 'Device not found' });
         }
-        res.json(result.rows[0]);
+        const dev = devRes.rows[0];
+        let matched_office = null;
+        let matched_subnet = null;
+        let network_classification = 'Unassigned / Unknown Network';
+
+        if (dev.ip_address && dev.ip_address.trim()) {
+            const match = matchIpToSubnets(dev.ip_address, activeSubnetsRes.rows);
+            if (match) {
+                matched_office = {
+                    id: match.office_id,
+                    name: match.office_name,
+                    code: match.office_code,
+                };
+                matched_subnet = {
+                    id: match.id,
+                    name: match.subnet_name,
+                    network_address: match.network_address,
+                    cidr_prefix: match.cidr_prefix,
+                    subnet_mask: match.subnet_mask,
+                    usable_ip_range: match.usableIpRange,
+                };
+                network_classification = `${match.office_name} (${match.network_address}/${match.cidr_prefix})`;
+            }
+        } else {
+            network_classification = 'Unassigned / No IP';
+        }
+
+        res.json({
+            ...dev,
+            matched_office,
+            matched_subnet,
+            network_classification,
+        });
     } catch (error) {
         console.error('Get device failed:', error.message);
         res.status(500).json({ error: 'Could not fetch device' });
@@ -195,7 +285,6 @@ app.put('/devices/:id', async (req, res) => {
         parent_device_name,
         location_notes,
         location_verification,
-        office,
     } = req.body;
 
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
@@ -243,9 +332,8 @@ app.put('/devices/:id', async (req, res) => {
                 parent_device_name = $13,
                 location_notes = $14,
                 location_verification = $15,
-                location_verified_at = $16,
-                office = COALESCE($17, office)
-             WHERE id = $18
+                location_verified_at = $16
+             WHERE id = $17
              RETURNING *`,
             [
                 name ? name.trim() : null,
@@ -264,7 +352,6 @@ app.put('/devices/:id', async (req, res) => {
                 location_notes !== undefined ? (location_notes ? location_notes.trim() : null) : curr.location_notes,
                 verificationStatus,
                 verifiedAt,
-                office !== undefined ? (office ? office.trim().toUpperCase() : curr.office) : curr.office,
                 id,
             ]
         );
@@ -579,31 +666,32 @@ async function runMonitoringCycle() {
 }
 
 // --------------------------------------------------
+// Serve the production React frontend if built
+// --------------------------------------------------
+const frontendDist = path.resolve(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+
+    app.get(/.*/, (req, res, next) => {
+        if (!req.accepts('html') || req.path.startsWith('/api') || req.path.startsWith('/devices') || req.path.startsWith('/health')) {
+            return next();
+        }
+        const indexFile = path.join(frontendDist, 'index.html');
+        if (fs.existsSync(indexFile)) {
+            res.sendFile(indexFile);
+        } else {
+            next();
+        }
+    });
+}
+
+// --------------------------------------------------
 // Start the API and monitoring scheduler
 // --------------------------------------------------
 
-
-// --------------------------------------------------
-// Serve the production React frontend
-// --------------------------------------------------
-
-const frontendDist = path.resolve(__dirname, '../frontend/dist');
-
-app.use(express.static(frontendDist));
-
-// Support React Router paths without swallowing API requests.
-app.get(/.*/, (req, res, next) => {
-    if (!req.accepts('html')) {
-        return next();
-    }
-
-    res.sendFile(path.join(frontendDist, 'index.html'), (error) => {
-        if (error) next(error);
-    });
-});
 const port = Number(process.env.PORT || 5001);
 
-const server = app.listen(port, '0.0.0.0', () => {
+const server = app.listen(port, () => {
     console.log(`Network Monitor API running at http://localhost:${port}`);
     console.log('Automatic real ping monitoring: every 30 seconds.');
 
@@ -657,4 +745,3 @@ function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-

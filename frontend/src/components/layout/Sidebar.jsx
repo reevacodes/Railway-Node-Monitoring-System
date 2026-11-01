@@ -18,7 +18,7 @@ import {
 import { useNetwork } from '../../context/NetworkContext';
 
 export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
-  const { devices, incidents, arpSummary } = useNetwork();
+  const { devices, incidents, arpSummary, subnets } = useNetwork();
 
 
   const incidentCount = incidents.length;
@@ -119,6 +119,18 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
           <NavLink to="/devices/manage" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Device Management">
             <Sliders className="nav-item-icon" />
             {!isCollapsed && <span>Device Management</span>}
+          </NavLink>
+
+          <NavLink to="/subnets" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Subnet Management">
+            <Network className="nav-item-icon" />
+            {!isCollapsed && (
+              <>
+                <span>Subnet Management</span>
+                {subnets && subnets.length > 0 && (
+                  <span className="nav-item-badge nav-badge-slate">{subnets.filter((s) => s.is_active).length}</span>
+                )}
+              </>
+            )}
           </NavLink>
 
           <NavLink to="/monitoring-config" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Monitoring Configuration">

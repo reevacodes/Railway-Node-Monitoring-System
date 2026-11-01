@@ -204,6 +204,24 @@ export const DeviceQuickDrawer = ({ device, isOpen, onClose, onEditDevice = null
               {device.ip_address}
             </span>
 
+            <span className="kv-key">Subnet Classification:</span>
+            <span className="kv-value">
+              {device.matched_subnet ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontWeight: 600, color: '#0369a1' }}>
+                    {device.matched_office?.office_name || 'Office'}
+                  </span>
+                  <span className="mono" style={{ fontSize: '11px', color: '#475569' }}>
+                    {device.matched_subnet.subnet_name} ({device.matched_subnet.cidr_prefix})
+                  </span>
+                </div>
+              ) : (
+                <span style={{ color: '#64748b', fontSize: '11px', fontStyle: 'italic' }}>
+                  {device.network_classification || 'Unassigned / Unknown Network'}
+                </span>
+              )}
+            </span>
+
             <span className="kv-key">MAC Interface ID:</span>
             <span className="kv-value mono">
               {device.mac_address || <span style={{ color: '#94a3b8' }}>Unrecorded</span>}

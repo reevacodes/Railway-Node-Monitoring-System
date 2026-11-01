@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('./db');
 const { pingDevice } = require('./ping_util');
 const { runDiscoveredPingCycle, getStatus } = require('./discovered_ping_service');
+const { matchIpToSubnets } = require('./subnet_util');
 
 const router = express.Router();
 
@@ -176,8 +177,47 @@ router.get('/api/discovered-devices', async (req, res) => {
       SELECT interface, count(*) FROM discovered_devices GROUP BY interface ORDER BY interface
     `);
 
+    // Fetch active subnets for automatic classification
+    const activeSubnetsRes = await pool.query(`
+      SELECT s.*, o.name AS office_name, o.code AS office_code
+      FROM subnets s
+      JOIN offices o ON o.id = s.office_id
+      WHERE s.is_active = TRUE
+      ORDER BY s.cidr_prefix DESC
+    `);
+    const activeSubnets = activeSubnetsRes.rows;
+
+    const enrichedItems = itemsRes.rows.map((row) => {
+      const match = matchIpToSubnets(row.ip_address, activeSubnets);
+      if (match) {
+        return {
+          ...row,
+          matched_office: {
+            id: match.office_id,
+            name: match.office_name,
+            code: match.office_code,
+          },
+          matched_subnet: {
+            id: match.id,
+            name: match.subnet_name,
+            network_address: match.network_address,
+            cidr_prefix: match.cidr_prefix,
+            subnet_mask: match.subnet_mask,
+            usable_ip_range: match.usableIpRange,
+          },
+          network_classification: `${match.office_name} (${match.network_address}/${match.cidr_prefix})`,
+        };
+      }
+      return {
+        ...row,
+        matched_office: null,
+        matched_subnet: null,
+        network_classification: 'Unassigned / Unknown Network',
+      };
+    });
+
     res.json({
-      items: itemsRes.rows,
+      items: enrichedItems,
       total: totalMatching,
       page: pageNum,
       limit: limitNum,
@@ -365,17 +405,13 @@ router.post('/api/discovered-devices/:id/register', async (req, res) => {
       if (existingDev.rows.length > 0) {
         registeredDevId = existingDev.rows[0].id;
       } else {
-        let autoOffice = 'DRM';
-        if (item.ip_address && item.ip_address.startsWith('192.168.41.')) autoOffice = 'NIA';
-        else if (building && (building.toLowerCase().includes('control') || building.toLowerCase().includes('cabin'))) autoOffice = 'CONTROL';
-
         // Insert new row in `devices`
         const insertDev = await client.query(
           `INSERT INTO devices
-            (name, ip_address, mac_address, device_type, building, notes, office)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+            (name, ip_address, mac_address, device_type, building, notes)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id`,
-          [devName, item.ip_address, item.mac_address, devType, building, notes, autoOffice]
+          [devName, item.ip_address, item.mac_address, devType, building, notes]
         );
         registeredDevId = insertDev.rows[0].id;
       }

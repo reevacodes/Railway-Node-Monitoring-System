@@ -20,6 +20,8 @@ export const NetworkProvider = ({ children }) => {
   const [globalSearch, setGlobalSearch] = useState('');
   const [notification, setNotification] = useState(null);
   const [arpSummary, setArpSummary] = useState(null);
+  const [subnets, setSubnets] = useState([]);
+  const [offices, setOffices] = useState([]);
 
   const isMounted = useRef(true);
   const refreshTimerRef = useRef(null);
@@ -119,6 +121,18 @@ export const NetworkProvider = ({ children }) => {
         if (arpSum) setArpSummary(arpSum);
       } catch (err) {
         console.warn('Could not load ARP summary:', err);
+      }
+
+      // 5. Fetch subnets and offices
+      try {
+        const [subs, offs] = await Promise.all([
+          api.getSubnets(),
+          api.getOffices(),
+        ]);
+        if (subs && isMounted.current) setSubnets(subs);
+        if (offs && isMounted.current) setOffices(offs);
+      } catch (err) {
+        console.warn('Could not load subnets/offices:', err);
       }
 
       setLastRefresh(new Date());
@@ -283,6 +297,17 @@ export const NetworkProvider = ({ children }) => {
     showNotification,
     incidents,
     allEvents,
+    subnets,
+    offices,
+    refreshSubnets: async () => {
+      try {
+        const [subs, offs] = await Promise.all([api.getSubnets(), api.getOffices()]);
+        if (subs) setSubnets(subs);
+        if (offs) setOffices(offs);
+      } catch (err) {
+        console.warn('Subnet refresh error:', err);
+      }
+    },
     refreshData: () => fetchAllData(false),
     addDevice,
     editDevice,

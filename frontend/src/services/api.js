@@ -24,24 +24,13 @@ class ApiService {
   }
 
   async request(path, options = {}, key = null) {
-    let controller = null;
-    let timeoutId = null;
-
     if (key) {
       this.cancelRequest(key);
-      controller = new AbortController();
+      const controller = new AbortController();
       this.abortControllers.set(key, controller);
-    } else {
-      controller = new AbortController();
+      options.signal = controller.signal;
     }
 
-    timeoutId = setTimeout(() => {
-      try {
-        controller.abort();
-      } catch (_) {}
-    }, 8000);
-
-    const signal = options.signal || controller.signal;
     const url = this.getEndpoint(path);
     const headers = {
       'Content-Type': 'application/json',
@@ -49,8 +38,7 @@ class ApiService {
     };
 
     try {
-      const response = await fetch(url, { ...options, headers, signal });
-      clearTimeout(timeoutId);
+      const response = await fetch(url, { ...options, headers });
       if (key) {
         this.abortControllers.delete(key);
       }
@@ -70,12 +58,11 @@ class ApiService {
 
       return await response.json();
     } catch (err) {
-      clearTimeout(timeoutId);
       if (key) {
         this.abortControllers.delete(key);
       }
       if (err.name === 'AbortError') {
-        throw new Error('Request timed out or cancelled');
+        throw new Error('Request cancelled');
       }
       throw err;
     }
@@ -295,6 +282,70 @@ class ApiService {
   async getUnifiedOverviewDevices(params = {}) {
     const endpoint = `/api/overview/unified-devices${this.buildQuery(params)}`;
     return this.request(endpoint, { method: 'GET' }, 'unified-devices');
+  }
+
+  /**
+   * 11. Subnet & Office Management Endpoints
+   */
+  async getOffices() {
+    return this.request('/api/offices', { method: 'GET' });
+  }
+
+  async createOffice(data) {
+    return this.request('/api/offices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSubnets(params = {}) {
+    const endpoint = `/api/subnets${this.buildQuery(params)}`;
+    return this.request(endpoint, { method: 'GET' });
+  }
+
+  async getSubnetById(id) {
+    return this.request(`/api/subnets/${id}`, { method: 'GET' });
+  }
+
+  async createSubnet(data) {
+    return this.request('/api/subnets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSubnet(id, data) {
+    return this.request(`/api/subnets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async toggleSubnetActive(id) {
+    return this.request(`/api/subnets/${id}/toggle`, {
+      method: 'PATCH',
+    });
+  }
+
+  async deleteSubnet(id, force = false) {
+    return this.request(`/api/subnets/${id}?force=${force}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async classifyIp(ip) {
+    return this.request(`/api/subnets/classify-ip?ip=${encodeURIComponent(ip)}`, {
+      method: 'GET',
+    });
+  }
+
+  async getTopologyHierarchy() {
+    return this.request('/api/subnets/topology-hierarchy', { method: 'GET' });
+  }
+
+  async previewSubnet(params) {
+    const endpoint = `/api/subnets/preview${this.buildQuery(params)}`;
+    return this.request(endpoint, { method: 'GET' });
   }
 }
 

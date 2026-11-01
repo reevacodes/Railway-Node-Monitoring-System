@@ -13,6 +13,7 @@ import MonitoringConfig from './pages/MonitoringConfig';
 import Settings from './pages/Settings';
 import MacInventory from './pages/MacInventory';
 import ArpDiscovery from './pages/ArpDiscovery';
+import SubnetManagement from './pages/SubnetManagement';
 
 export const App = () => {
   return (
@@ -25,6 +26,7 @@ export const App = () => {
             <Route path="devices" element={<DeviceInventory />} />
             <Route path="devices/:id" element={<DeviceDetails />} />
             <Route path="devices/manage" element={<DeviceManagement />} />
+            <Route path="subnets" element={<SubnetManagement />} />
             <Route path="topology" element={<NetworkTopology />} />
             <Route path="mac-inventory" element={<MacInventory />} />
             <Route path="arp-discovery" element={<ArpDiscovery />} />

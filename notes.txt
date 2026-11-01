@@ -1,0 +1,11 @@
+ARP_IMPORTER.JS -> This file takes the ARP table data extracted from your Sophos Firewall, cleans and validates it, compares it with your registered MAC inventory, and saves the results in PostgreSQL.
+
+parseCSVLine()	    -> Separates CSV columns
+parseCSVOrCLI()	-> Reads CSV or CLI neighbor output
+parseArpSnapshot()	-> Parses, cleans and validates ARP data
+importArpSnapshot()	-> Saves the snapshot and discoveries
+getLatestSnapshotSummary()	-> Retrieves the latest snapshot summary
+getSnapshotDetails()	->Retrieves individual snapshot details
+syncDiscoveredDevicesFromSnapshot()	-> Updates registered IPs and synchronizes discovered devices
+
+Notice that the first three functions prepare data, the importer saves it, and the final functions retrieve or synchronize it.
