@@ -55,7 +55,19 @@ app.get('/health', async (req, res) => {
 app.get('/devices', async (req, res) => {
     try {
         const [devicesResult, activeSubnetsRes] = await Promise.all([
-            pool.query('SELECT * FROM devices ORDER BY id'),
+            pool.query(`
+                SELECT d.*,
+                       ls.status AS latest_status,
+                       ls.latency_ms AS latest_latency_ms,
+                       ls.checked_at AS latest_checked_at
+                FROM devices d
+                LEFT JOIN (
+                    SELECT DISTINCT ON (device_id) device_id, status, latency_ms, checked_at
+                    FROM status_history
+                    ORDER BY device_id, checked_at DESC
+                ) ls ON ls.device_id = d.id
+                ORDER BY d.id
+            `),
             pool.query(`
                 SELECT s.*, o.name AS office_name, o.code AS office_code
                 FROM subnets s
@@ -67,9 +79,16 @@ app.get('/devices', async (req, res) => {
 
         const activeSubnets = activeSubnetsRes.rows;
         const enriched = devicesResult.rows.map((device) => {
+            const current_status = {
+                status: device.latest_status || 'unknown',
+                latency_ms: device.latest_latency_ms !== null ? Number(device.latest_latency_ms) : null,
+                checked_at: device.latest_checked_at,
+            };
+
             if (!device.ip_address || !device.ip_address.trim()) {
                 return {
                     ...device,
+                    current_status,
                     matched_office: null,
                     matched_subnet: null,
                     network_classification: 'Unassigned / No IP',
@@ -79,6 +98,7 @@ app.get('/devices', async (req, res) => {
             if (match) {
                 return {
                     ...device,
+                    current_status,
                     matched_office: {
                         id: match.office_id,
                         name: match.office_name,
@@ -97,6 +117,7 @@ app.get('/devices', async (req, res) => {
             }
             return {
                 ...device,
+                current_status,
                 matched_office: null,
                 matched_subnet: null,
                 network_classification: 'Unassigned / Unknown Network',
@@ -133,6 +154,8 @@ app.post('/devices', async (req, res) => {
         parent_device_name,
         location_notes,
         location_verification,
+        contact_person,
+        contact_phone,
     } = req.body;
 
     if (
@@ -158,8 +181,9 @@ app.post('/devices', async (req, res) => {
        (name, ip_address, mac_address, device_type, notes,
         building, floor, room, rack, rack_position, port_number,
         parent_device_id, parent_device_name, location_notes,
-        location_verification, location_verified_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        location_verification, location_verified_at,
+        contact_person, contact_phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING *`,
             [
                 name.trim(),
@@ -178,6 +202,8 @@ app.post('/devices', async (req, res) => {
                 location_notes ? location_notes.trim() : null,
                 verificationStatus,
                 verifiedAt,
+                contact_person ? contact_person.trim() : null,
+                contact_phone ? contact_phone.trim() : null,
             ]
         );
 
@@ -285,6 +311,8 @@ app.put('/devices/:id', async (req, res) => {
         parent_device_name,
         location_notes,
         location_verification,
+        contact_person,
+        contact_phone,
     } = req.body;
 
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
@@ -332,8 +360,10 @@ app.put('/devices/:id', async (req, res) => {
                 parent_device_name = $13,
                 location_notes = $14,
                 location_verification = $15,
-                location_verified_at = $16
-             WHERE id = $17
+                location_verified_at = $16,
+                contact_person = $17,
+                contact_phone = $18
+             WHERE id = $19
              RETURNING *`,
             [
                 name ? name.trim() : null,
@@ -352,6 +382,8 @@ app.put('/devices/:id', async (req, res) => {
                 location_notes !== undefined ? (location_notes ? location_notes.trim() : null) : curr.location_notes,
                 verificationStatus,
                 verifiedAt,
+                contact_person !== undefined ? (contact_person ? contact_person.trim() : null) : curr.contact_person,
+                contact_phone !== undefined ? (contact_phone ? contact_phone.trim() : null) : curr.contact_phone,
                 id,
             ]
         );
@@ -478,12 +510,14 @@ app.get('/devices/:id/history', async (req, res) => {
     }
 
     try {
+        const limit = Math.min(Number(req.query.limit) || 50, 200);
         const result = await pool.query(
             `SELECT id, device_id, status, checked_at, latency_ms
        FROM status_history
        WHERE device_id = $1
-       ORDER BY checked_at DESC, id DESC`,
-            [deviceId]
+       ORDER BY checked_at DESC, id DESC
+       LIMIT $2`,
+            [deviceId, limit]
         );
 
         res.json(result.rows);
@@ -492,6 +526,50 @@ app.get('/devices/:id/history', async (req, res) => {
 
         res.status(500).json({
             error: 'Could not fetch status history',
+        });
+    }
+});
+
+// --------------------------------------------------
+// 5b. Get recent status check events across all devices (Optimized flat event stream)
+// --------------------------------------------------
+app.get('/events/recent', async (req, res) => {
+    try {
+        const limit = Math.min(Number(req.query.limit) || 150, 500);
+        const result = await pool.query(
+            `SELECT sh.id, sh.device_id, sh.status, sh.checked_at, sh.latency_ms,
+                    d.name AS device_name, d.device_type, d.ip_address, d.building, d.room
+             FROM status_history sh
+             JOIN devices d ON d.id = sh.device_id
+             ORDER BY sh.checked_at DESC, sh.id DESC
+             LIMIT $1`,
+            [limit]
+        );
+
+        const events = result.rows.map((row) => ({
+            id: row.id,
+            device_id: row.device_id,
+            status: row.status,
+            checked_at: row.checked_at,
+            latency_ms: row.latency_ms,
+            deviceName: row.device_name,
+            deviceType: row.device_type || 'Unknown',
+            ipAddress: row.ip_address || '—',
+            device: {
+                id: row.device_id,
+                name: row.device_name,
+                device_type: row.device_type,
+                ip_address: row.ip_address,
+                building: row.building,
+                room: row.room,
+            },
+        }));
+
+        res.json(events);
+    } catch (error) {
+        console.error('Fetch recent events failed:', error.message);
+        res.status(500).json({
+            error: 'Could not fetch recent events',
         });
     }
 });
@@ -609,7 +687,7 @@ async function runMonitoringCycle() {
         console.log('\n--- Automatic real ping monitoring cycle started ---');
 
         const devicesResult = await pool.query(
-            'SELECT id, name, ip_address FROM devices ORDER BY id'
+            'SELECT id, name, ip_address, mac_address FROM devices ORDER BY id'
         );
 
         const devices = devicesResult.rows;
@@ -619,12 +697,44 @@ async function runMonitoringCycle() {
             return;
         }
 
+        // Auto-resolve IP from firewall discovered_devices for registered nodes with MAC address
+        for (const device of devices) {
+            if (!device.ip_address && device.mac_address) {
+                const cleanMac = device.mac_address.toLowerCase().replace(/[^a-f0-9]/g, '');
+                try {
+                    const matchRes = await pool.query(
+                        "SELECT ip_address FROM discovered_devices WHERE LOWER(REPLACE(mac_address, ':', '')) = $1 LIMIT 1",
+                        [cleanMac]
+                    );
+                    if (matchRes.rows.length > 0) {
+                        const matchedIp = matchRes.rows[0].ip_address;
+                        const dupCheck = await pool.query(
+                            "SELECT id FROM devices WHERE ip_address = $1 AND id != $2",
+                            [matchedIp, device.id]
+                        );
+                        if (dupCheck.rows.length === 0) {
+                            await pool.query(
+                                "UPDATE devices SET ip_address = $1 WHERE id = $2",
+                                [matchedIp, device.id]
+                            );
+                            device.ip_address = matchedIp;
+                            console.log(`[Auto-Discovered] ${device.name} (MAC: ${device.mac_address}) auto-assigned IP ${matchedIp} from firewall ARP.`);
+                        }
+                    }
+                } catch (err) {
+                    // ignore lookup errors
+                }
+            }
+        }
+
         const BATCH_SIZE = 6;
         for (let i = 0; i < devices.length; i += BATCH_SIZE) {
             const batch = devices.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(async (device) => {
                 if (!device.ip_address) {
-                    // Device pending IP discovery from firewall
+                    console.log(
+                        `${device.name} (ID #${device.id}) -> pending IP [MAC: ${device.mac_address || 'None'} - Awaiting Firewall ARP]`
+                    );
                     return;
                 }
                 const check = await pingDevice(device.ip_address);

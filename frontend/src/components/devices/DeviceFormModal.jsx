@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import { useNetwork } from '../../context/NetworkContext';
-import { MapPin, Server, Network, CheckCircle2, Info, Building2 } from 'lucide-react';
+import { MapPin, Server, Network, CheckCircle2, Info, User, Phone } from 'lucide-react';
 
 const DEVICE_TYPES = [
   'PC',
@@ -50,7 +50,8 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
     mac_address: '',
     device_type: 'Router',
     notes: '',
-    office: 'DRM',
+    contact_person: '',
+    contact_phone: '',
     building: '',
     floor: '',
     room: '',
@@ -64,7 +65,6 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isSubmittingRef = useRef(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -75,10 +75,8 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         mac_address: initialDevice.mac_address || '',
         device_type: initialDevice.device_type || 'Router',
         notes: initialDevice.notes || '',
-        office: initialDevice.office || (
-          (initialDevice.ip_address && initialDevice.ip_address.startsWith('192.168.41.')) ? 'NIA' :
-          (initialDevice.building && initialDevice.building.toLowerCase().includes('control')) ? 'CONTROL' : 'DRM'
-        ),
+        contact_person: initialDevice.contact_person || '',
+        contact_phone: initialDevice.contact_phone || '',
         building: initialDevice.building || '',
         floor: initialDevice.floor || '',
         room: initialDevice.room || '',
@@ -97,7 +95,8 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         mac_address: '',
         device_type: 'Router',
         notes: '',
-        office: 'DRM',
+        contact_person: '',
+        contact_phone: '',
         building: '',
         floor: '',
         room: '',
@@ -111,7 +110,6 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
       });
     }
     setErrorMsg('');
-    isSubmittingRef.current = false;
   }, [initialDevice, isOpen]);
 
   const handleChange = (e) => {
@@ -134,20 +132,12 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    e.stopPropagation();
-
-    // Prevent duplicate concurrent submissions
-    if (isSubmittingRef.current || isSubmitting) return;
-
     if (!formData.name.trim()) {
       setErrorMsg('Device name is required');
       return;
     }
 
-    isSubmittingRef.current = true;
     setIsSubmitting(true);
-    setErrorMsg('');
-
     try {
       const payload = {
         name: formData.name.trim(),
@@ -155,7 +145,8 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         mac_address: formData.mac_address.trim() || null,
         device_type: formData.device_type,
         notes: formData.notes.trim() || null,
-        office: formData.office || 'DRM',
+        contact_person: formData.contact_person.trim() || null,
+        contact_phone: formData.contact_phone.trim() || null,
         building: formData.building.trim() || null,
         floor: formData.floor.trim() || null,
         room: formData.room.trim() || null,
@@ -173,12 +164,10 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
       } else {
         await addDevice(payload);
       }
-      // Only close on verified success
-      onClose?.();
+      onClose();
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save device information');
     } finally {
-      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -294,6 +283,40 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
               </select>
             </div>
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '6px' }}>
+            <div className="form-group" style={{ marginBottom: '8px' }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <User size={12} style={{ color: '#0284c7' }} />
+                <span>Name of Person</span>
+              </label>
+              <input
+                type="text"
+                name="contact_person"
+                className="form-input"
+                placeholder="e.g. Ramesh Kumar (Sr. Section Engineer)"
+                value={formData.contact_person}
+                onChange={handleChange}
+              />
+              <div className="form-hint">Designated custodian or staff using node</div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '8px' }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Phone size={12} style={{ color: '#0284c7' }} />
+                <span>Phone Number</span>
+              </label>
+              <input
+                type="text"
+                name="contact_phone"
+                className="form-input mono"
+                placeholder="e.g. +91 98765 43210 / Intercom: 4421"
+                value={formData.contact_phone}
+                onChange={handleChange}
+              />
+              <div className="form-hint">Mobile number, CUG or railway intercom</div>
+            </div>
+          </div>
         </div>
 
         {/* Section 2: Physical Device Location Hierarchy */}
@@ -312,32 +335,12 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
             }}
           >
             <MapPin size={13} style={{ color: '#059669' }} />
-            <span>2. Railway Office Division & Physical Location</span>
-          </div>
-
-          {/* Dedicated Railway Office Branch Assignment */}
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label className="form-label" style={{ fontWeight: 600 }}>
-              Railway Office Division <span className="required">*</span>
-            </label>
-            <select
-              name="office"
-              className="form-select"
-              value={formData.office}
-              onChange={handleChange}
-              style={{ fontWeight: 500 }}
-              required
-            >
-              <option value="DRM">DRM Office (Divisional HQ / Core Infrastructure)</option>
-              <option value="CONTROL">Control Office (Train Dispatch & Section Operations)</option>
-              <option value="NIA">NIA Office (Telecom Substation & Fiber Aggregation)</option>
-            </select>
-            <div className="form-hint">Assigns node directly to its official branch on the Railway Network Topology tree.</div>
+            <span>2. Physical Location Hierarchy (Optional)</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group" style={{ marginBottom: '8px' }}>
-              <label className="form-label">Building / Campus</label>
+              <label className="form-label">Building / Office</label>
               <input
                 type="text"
                 name="building"
@@ -496,16 +499,7 @@ export const DeviceFormModal = ({ isOpen, onClose, initialDevice = null }) => {
         </div>
 
         <div className="modal-footer" style={{ margin: '18px -18px -18px -18px' }}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose?.();
-            }}
-            disabled={isSubmitting}
-          >
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={isSubmitting}>

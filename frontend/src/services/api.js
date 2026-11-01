@@ -157,6 +157,14 @@ class ApiService {
     return this.request(`/devices/${id}/history`, { method: 'GET' }, `history-${id}`);
   }
 
+  /**
+   * 6b. Recent Events Stream across all devices (Optimized)
+   * GET /events/recent?limit=150
+   */
+  async getRecentEvents(limit = 150) {
+    return this.request(`/events/recent?limit=${limit}`, { method: 'GET' }, 'recent-events');
+  }
+
   buildQuery(params = {}) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {

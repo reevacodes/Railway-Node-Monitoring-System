@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
 
 const NetworkContext = createContext(null);
@@ -7,6 +7,7 @@ export const NetworkProvider = ({ children }) => {
   const [devices, setDevices] = useState([]);
   const [deviceStatuses, setDeviceStatuses] = useState({});
   const [deviceHistories, setDeviceHistories] = useState({});
+  const [recentEvents, setRecentEvents] = useState([]);
   const [backendHealth, setBackendHealth] = useState({
     healthy: false,
     database: '',
@@ -32,6 +33,19 @@ export const NetworkProvider = ({ children }) => {
     setTimeout(() => {
       setNotification((curr) => (curr?.message === message ? null : curr));
     }, 4000);
+  }, []);
+
+  const fetchDeviceHistory = useCallback(async (deviceId) => {
+    try {
+      const hist = await api.getDeviceHistory(deviceId);
+      if (Array.isArray(hist) && isMounted.current) {
+        setDeviceHistories((prev) => ({ ...prev, [deviceId]: hist }));
+        return hist;
+      }
+    } catch (err) {
+      console.warn(`Could not load history for device ${deviceId}`, err);
+    }
+    return [];
   }, []);
 
   const fetchAllData = useCallback(async (isSilent = false) => {
@@ -62,63 +76,42 @@ export const NetworkProvider = ({ children }) => {
         });
       }
 
-      // 2. Devices
+      // 2. Devices (Already includes current_status, eliminating 60 parallel HTTP calls!)
       let deviceList = [];
       try {
         deviceList = await api.getDevices();
-        if (Array.isArray(deviceList)) {
+        if (Array.isArray(deviceList) && isMounted.current) {
           setDevices(deviceList);
+
+          // Populate statuses instantly in 0 extra network calls!
+          const statuses = {};
+          deviceList.forEach((dev) => {
+            statuses[dev.id] = dev.current_status || {
+              status: dev.latest_status || 'unknown',
+              latency_ms: dev.latest_latency_ms !== null ? Number(dev.latest_latency_ms) : null,
+              checked_at: dev.latest_checked_at,
+            };
+          });
+          setDeviceStatuses(statuses);
         }
       } catch (err) {
         console.error('Failed to load devices:', err);
       }
 
-      // 3. For each device, fetch latest history to determine current status & latency
-      if (Array.isArray(deviceList) && deviceList.length > 0) {
-        const statuses = {};
-        const histories = {};
-
-        await Promise.all(
-          deviceList.map(async (dev) => {
-            try {
-              const hist = await api.getDeviceHistory(dev.id);
-              if (Array.isArray(hist)) {
-                histories[dev.id] = hist;
-                if (hist.length > 0) {
-                  // Most recent status record (ORDER BY checked_at DESC)
-                  statuses[dev.id] = hist[0];
-                } else {
-                  statuses[dev.id] = {
-                    status: 'unknown',
-                    latency_ms: null,
-                    checked_at: null,
-                    untested: true,
-                  };
-                }
-              }
-            } catch (err) {
-              console.warn(`Could not load history for device ${dev.id}`, err);
-              statuses[dev.id] = {
-                status: 'unknown',
-                latency_ms: null,
-                checked_at: null,
-                error: true,
-              };
-            }
-          })
-        );
-
-        setDeviceStatuses(statuses);
-        setDeviceHistories(histories);
-      } else {
-        setDeviceStatuses({});
-        setDeviceHistories({});
+      // 3. Fast recent events stream (Single call instead of 60 individual history downloads!)
+      try {
+        const events = await api.getRecentEvents(150);
+        if (Array.isArray(events) && isMounted.current) {
+          setRecentEvents(events);
+        }
+      } catch (err) {
+        console.warn('Could not load recent events:', err);
       }
 
       // 4. Fetch Sophos ARP discovery summary
       try {
         const arpSum = await api.getArpSummary();
-        if (arpSum) setArpSummary(arpSum);
+        if (arpSum && isMounted.current) setArpSummary(arpSum);
       } catch (err) {
         console.warn('Could not load ARP summary:', err);
       }
@@ -245,18 +238,20 @@ export const NetworkProvider = ({ children }) => {
     })
     .filter((item) => item.status === 'offline' || item.status === 'unknown' || item.isDegraded);
 
-  // Compile flat chronological event log across all devices
-  const allEvents = Object.entries(deviceHistories).flatMap(([devId, histList]) => {
-    const dev = devices.find((d) => String(d.id) === String(devId));
-    return (histList || []).map((h) => ({
-      ...h,
-      deviceName: dev?.name || `Device #${devId}`,
-      deviceType: dev?.device_type || 'Unknown',
-      ipAddress: dev?.ip_address || '—',
-      device: dev || null,
-    }));
-  }).sort((a, b) => new Date(b.checked_at) - new Date(a.checked_at));
-
+  // Compile flat chronological event log across all devices (Optimized with recentEvents stream)
+  const allEvents = useMemo(() => {
+    if (recentEvents && recentEvents.length > 0) return recentEvents;
+    return Object.entries(deviceHistories).flatMap(([devId, histList]) => {
+      const dev = devices.find((d) => String(d.id) === String(devId));
+      return (histList || []).map((h) => ({
+        ...h,
+        deviceName: dev?.name || `Device #${devId}`,
+        deviceType: dev?.device_type || 'Unknown',
+        ipAddress: dev?.ip_address || '—',
+        device: dev || null,
+      }));
+    }).sort((a, b) => new Date(b.checked_at) - new Date(a.checked_at));
+  }, [recentEvents, deviceHistories, devices]);
 
   const uploadArpSnapshot = async (payload) => {
     try {
@@ -286,6 +281,7 @@ export const NetworkProvider = ({ children }) => {
     devices,
     deviceStatuses,
     deviceHistories,
+    fetchDeviceHistory,
     backendHealth,
     arpSummary,
     lastRefresh,

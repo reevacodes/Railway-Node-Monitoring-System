@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Drawer from '../common/Drawer';
 import StatusBadge from '../common/StatusBadge';
@@ -16,13 +16,21 @@ import {
   Network,
   Clock,
   Layers,
+  User,
+  Phone,
 } from 'lucide-react';
 
 export const DeviceQuickDrawer = ({ device, isOpen, onClose, onEditDevice = null }) => {
   const navigate = useNavigate();
-  const { deviceStatuses, deviceHistories, probeDevice, verifyLocation } = useNetwork();
+  const { deviceStatuses, deviceHistories, fetchDeviceHistory, probeDevice, verifyLocation } = useNetwork();
   const [isProbing, setIsProbing] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && device?.id && fetchDeviceHistory) {
+      fetchDeviceHistory(device.id);
+    }
+  }, [isOpen, device?.id, fetchDeviceHistory]);
 
   if (!device) return null;
 
@@ -166,6 +174,16 @@ export const DeviceQuickDrawer = ({ device, isOpen, onClose, onEditDevice = null
               {device.location_verified_at
                 ? new Date(device.location_verified_at).toLocaleString()
                 : <span style={{ color: '#94a3b8' }}>Not verified</span>}
+            </span>
+
+            <span className="kv-key">Contact Person:</span>
+            <span className="kv-value" style={{ fontWeight: device.contact_person ? 600 : 'normal' }}>
+              {device.contact_person || <span style={{ color: '#94a3b8' }}>Unrecorded</span>}
+            </span>
+
+            <span className="kv-key">Phone / Intercom:</span>
+            <span className="kv-value mono" style={{ color: device.contact_phone ? '#0284c7' : 'inherit' }}>
+              {device.contact_phone || <span style={{ color: '#94a3b8' }}>Unrecorded</span>}
             </span>
 
             <span className="kv-key">Location Notes:</span>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNetwork } from '../context/NetworkContext';
 import StatusBadge from '../components/common/StatusBadge';
@@ -39,6 +39,21 @@ export const DeviceInventory = () => {
     globalSearch,
     setGlobalSearch,
   } = useNetwork();
+
+  const [localSearch, setLocalSearch] = useState(globalSearch || '');
+
+  useEffect(() => {
+    setLocalSearch(globalSearch || '');
+  }, [globalSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== globalSearch) {
+        setGlobalSearch(localSearch);
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [localSearch, globalSearch, setGlobalSearch]);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deviceToEdit, setDeviceToEdit] = useState(null);
@@ -129,6 +144,8 @@ export const DeviceInventory = () => {
         const floor = (dev.floor || '').toLowerCase();
         const rack = (dev.rack || '').toLowerCase();
         const port = String(dev.port_number || '').toLowerCase();
+        const contactPerson = (dev.contact_person || '').toLowerCase();
+        const contactPhone = (dev.contact_phone || '').toLowerCase();
         const notes = (dev.notes || '').toLowerCase();
         const locNotes = (dev.location_notes || '').toLowerCase();
         const idStr = String(dev.id || '');
@@ -153,6 +170,8 @@ export const DeviceInventory = () => {
           floor.includes(query) ||
           rack.includes(query) ||
           port.includes(query) ||
+          contactPerson.includes(query) ||
+          contactPhone.includes(query) ||
           notes.includes(query) ||
           locNotes.includes(query);
 
@@ -407,15 +426,18 @@ export const DeviceInventory = () => {
               <input
                 type="text"
                 className="form-input"
-                style={{ paddingLeft: '28px', paddingRight: globalSearch ? '24px' : '8px', height: '30px', fontSize: '11.5px' }}
+                style={{ paddingLeft: '28px', paddingRight: localSearch ? '24px' : '8px', height: '30px', fontSize: '11.5px' }}
                 placeholder="Search name, IP, MAC, room, rack..."
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
               />
-              {globalSearch && (
+              {localSearch && (
                 <button
                   type="button"
-                  onClick={() => setGlobalSearch('')}
+                  onClick={() => {
+                    setLocalSearch('');
+                    setGlobalSearch('');
+                  }}
                   style={{
                     position: 'absolute',
                     right: '6px',
@@ -521,7 +543,10 @@ export const DeviceInventory = () => {
                     {globalSearch && (
                       <button
                         className="btn btn-primary btn-sm"
-                        onClick={() => setGlobalSearch('')}
+                        onClick={() => {
+                          setLocalSearch('');
+                          setGlobalSearch('');
+                        }}
                       >
                         Clear Search
                       </button>
@@ -529,6 +554,7 @@ export const DeviceInventory = () => {
                     <button
                       className="btn btn-secondary btn-sm"
                       onClick={() => {
+                        setLocalSearch('');
                         setGlobalSearch('');
                         setQuickFilter('ALL');
                         setTypeFilter('ALL');
@@ -627,6 +653,14 @@ export const DeviceInventory = () => {
                               </span>
                             )}
                           </div>
+                          {(dev.contact_person || dev.contact_phone) && (
+                            <div style={{ fontSize: '10.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                              <span>{dev.contact_person || 'Custodian'}</span>
+                              {dev.contact_phone && (
+                                <span className="mono" style={{ color: '#0284c7' }}>• {dev.contact_phone}</span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <DeviceTypeBadge type={dev.device_type} />
