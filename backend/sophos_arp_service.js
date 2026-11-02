@@ -244,76 +244,195 @@ const MAX_PAGES = 50;
 
 /**
  * Validates extracted ARP entries before importing.
+ * Evaluates pagination completeness, minimum entry thresholds, IPv4/MAC syntax,
+ * and detects suspicious entry count drops relative to the previous snapshot.
  * 
  * @param {Array<object>} entries
- * @returns {{ valid: boolean, errors: string[], stats: object }}
+ * @param {object} [telemetry]
+ * @param {object} [previousSnapshotSummary]
+ * @returns {{ valid: boolean, status: string, errors: string[], warnings: string[], stats: object }}
  */
-function validateExtractedSnapshot(entries) {
-  console.log("validate Extracted Snapshots");
+function validateExtractedSnapshot(entries, telemetry = null, previousSnapshotSummary = null) {
   const errors = [];
+  const warnings = [];
+  let status = 'complete';
+
   if (!Array.isArray(entries)) {
-    return { valid: false, errors: ['Extracted snapshot payload is not an array'], stats: null };
+    return {
+      valid: false,
+      status: 'failed',
+      errors: ['Extracted snapshot payload is not an array'],
+      warnings: [],
+      stats: null
+    };
   }
 
-  if (entries.length < CONFIG.minValidEntries) {
-    errors.push(`Extracted snapshot contains too few entries (${entries.length}; minimum required is ${CONFIG.minValidEntries})`);
+  // 1. Pagination completeness check
+  if (telemetry) {
+    if (telemetry.paginationCompleted === false || (telemetry.totalPagesDetected > 1 && telemetry.pagesVisited < telemetry.totalPagesDetected)) {
+      status = 'incomplete';
+      errors.push(`Incomplete pagination: visited ${telemetry.pagesVisited} of ${telemetry.totalPagesDetected} detected pages`);
+    }
+
+    if (telemetry.errors && telemetry.errors.length > 0) {
+      warnings.push(...telemetry.errors);
+    }
   }
 
+  // 2. Entry count check
+  if (entries.length === 0) {
+    errors.push('Extracted snapshot contains zero entries');
+    status = 'failed';
+  } else if (CONFIG.minValidEntries && entries.length < CONFIG.minValidEntries) {
+    warnings.push(`Extracted snapshot contains ${entries.length} entries (below advisory baseline of ${CONFIG.minValidEntries})`);
+    if (status === 'complete') status = 'complete_with_warnings';
+  }
+
+  // 3. Format validations
   let validIpCount = 0;
   let validMacCount = 0;
   let incompleteCount = 0;
+  let invalidCount = 0;
 
   for (const item of entries) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== 'object') {
+      invalidCount++;
+      continue;
+    }
     const ip = (item.ip || item.ip_address || '').toString().trim();
     const mac = (item.mac || item.mac_address || '').toString().trim();
+    const state = (item.arp_state || item.state || '').toString().toLowerCase();
 
-    if (net.isIPv4(ip)) validIpCount++;
+    let entryHasError = false;
+    if (net.isIPv4(ip)) {
+      validIpCount++;
+    } else {
+      entryHasError = true;
+    }
+
+    const isExplicitIncomplete = state === 'incomplete' || !mac || mac === '00:00:00:00:00:00' || mac.toLowerCase().includes('incomplete');
     const norm = normalizeMac(mac);
-    if (norm) validMacCount++;
-    else incompleteCount++;
+
+    if (isExplicitIncomplete || norm === '000000000000') {
+      incompleteCount++;
+    } else if (norm) {
+      validMacCount++;
+    } else {
+      entryHasError = true;
+    }
+
+    if (entryHasError) {
+      invalidCount++;
+    }
   }
 
-  if (validIpCount === 0) {
+  if (entries.length > 0 && validIpCount === 0) {
     errors.push('No valid IPv4 addresses found in extracted entries');
+    status = 'failed';
   }
 
-  if (validMacCount === 0) {
-    errors.push('No valid MAC addresses found in extracted entries');
+  if (entries.length > 0 && validMacCount === 0 && incompleteCount === 0) {
+    errors.push('No valid or recognizable MAC addresses found in extracted entries');
+    status = 'failed';
+  }
+
+  // 4. Anomaly detection: count reduction vs previous snapshot
+  const prevCount = typeof previousSnapshotSummary === 'number'
+    ? previousSnapshotSummary
+    : (previousSnapshotSummary && previousSnapshotSummary.total_entries ? previousSnapshotSummary.total_entries : 0);
+
+  if (prevCount > 0 && status !== 'failed') {
+    const currentCount = entries.length;
+    if (currentCount < prevCount * 0.75) {
+      const dropPct = Math.round(((prevCount - currentCount) / prevCount) * 100);
+      warnings.push(`Significant drop in entry count: extracted ${currentCount} entries vs previous ${prevCount} (-${dropPct}%)`);
+      if (status === 'complete') {
+        status = 'complete_with_warnings';
+      }
+    }
+  }
+
+  // 5. Final status resolution
+  if (errors.length > 0) {
+    if (status !== 'incomplete') status = 'failed';
+  } else if (warnings.length > 0) {
+    status = 'complete_with_warnings';
   }
 
   return {
-    valid: errors.length === 0,
+    valid: status === 'complete' || status === 'complete_with_warnings',
+    status,
     errors,
+    warnings,
     stats: {
       total: entries.length,
       validIp: validIpCount,
+      validIps: validIpCount,
       validMac: validMacCount,
-      incomplete: incompleteCount
+      validMacs: validMacCount,
+      incomplete: incompleteCount,
+      incompleteArp: incompleteCount,
+      invalid: invalidCount,
+      invalidEntries: invalidCount
     }
   };
 }
 
 /**
  * Extracts ARP entries from Sophos firewall using Playwright browser automation.
- * Reuses the tested authentication and navigation logic from inspect-network.js.
+ * Tracks page-by-page progress, pagination completeness, duration, and raw records.
  * 
  * @param {object} [options]
- * @returns {Promise<Array<object>>}
+ * @returns {Promise<{ entries: Array<object>, rawEntries: Array<object>, telemetry: object }>}
  */
 async function extractFromSophosBrowser(options = {}) {
+  const startTime = Date.now();
+
   if (options.simulateFailure) {
     throw new Error('Simulated extraction failure for operational resilience testing');
   }
 
   if (options.entries) {
-    return options.entries;
+    const rawEntries = options.rawEntries || options.entries;
+    const telem = options.telemetry || {
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date().toISOString(),
+      durationMs: 120,
+      totalPagesDetected: options.totalPagesDetected || 1,
+      pagesVisited: options.pagesVisited || 1,
+      paginationCompleted: options.paginationCompleted !== undefined ? options.paginationCompleted : true,
+      pageRows: [{ page: 1, rows: rawEntries.length }],
+      totalRawEntries: rawEntries.length,
+      duplicateCount: Math.max(0, rawEntries.length - options.entries.length),
+      errors: []
+    };
+    return {
+      entries: options.entries,
+      rawEntries,
+      telemetry: telem
+    };
   }
 
   if (options.fixturePath && fs.existsSync(options.fixturePath)) {
     const raw = fs.readFileSync(options.fixturePath, 'utf8');
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : (parsed.entries || []);
+    const list = Array.isArray(parsed) ? parsed : (parsed.entries || []);
+    return {
+      entries: list,
+      rawEntries: list,
+      telemetry: {
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date().toISOString(),
+        durationMs: 80,
+        totalPagesDetected: 1,
+        pagesVisited: 1,
+        paginationCompleted: true,
+        pageRows: [{ page: 1, rows: list.length }],
+        totalRawEntries: list.length,
+        duplicateCount: 0,
+        errors: []
+      }
+    };
   }
 
   if (!playwrightChromium) {
@@ -407,9 +526,13 @@ async function extractFromSophosBrowser(options = {}) {
       return label && /\(\s*1\s+of\s+\d+\s*\)/i.test(label.textContent.trim()) && rows.length > 0;
     }, { timeout: 15000 });
 
-    // Extract pages
+    // Extract pages with telemetry tracking
     const allEntries = [];
     const seenLabels = new Set();
+    const pageRows = [];
+    let totalPagesDetected = 1;
+    let pagesVisited = 0;
+    let paginationCompleted = false;
 
     for (let index = 0; index < MAX_PAGES; index++) {
       const label = (await page.locator(SELECTORS.pageLabel).innerText().catch(() => '')).trim();
@@ -430,17 +553,32 @@ async function extractFromSophosBrowser(options = {}) {
         }).filter(entry => entry.ip)
       );
 
+      pagesVisited++;
+      const match = label.match(/\(?\s*(\d+)\s+of\s+(\d+)\s*\)?/i);
+      const currentPageNum = match ? Number(match[1]) : pagesVisited;
+      if (match) {
+        totalPagesDetected = Number(match[2]);
+      }
+      pageRows.push({ page: currentPageNum, rows: rows.length });
       allEntries.push(...rows);
 
-      const match = label.match(/\(?\s*(\d+)\s+of\s+(\d+)\s*\)?/i);
-      if (!match) break;
-      const current = Number(match[1]);
-      const total = Number(match[2]);
-      if (current >= total) break;
+      if (match) {
+        const current = Number(match[1]);
+        const total = Number(match[2]);
+        if (current >= total) {
+          paginationCompleted = true;
+          break;
+        }
+      }
 
       const next = page.locator(SELECTORS.nextPage);
       const nextClass = await next.getAttribute('class').catch(() => '');
-      if (/disabled/i.test(nextClass)) break;
+      if (/disabled/i.test(nextClass)) {
+        if (pagesVisited >= totalPagesDetected) {
+          paginationCompleted = true;
+        }
+        break;
+      }
 
       await next.click();
       await page.waitForFunction(
@@ -453,14 +591,35 @@ async function extractFromSophosBrowser(options = {}) {
       ).catch(() => { });
     }
 
-    return [
-      ...new Map(
-        allEntries.map(entry => [
-          `${entry.ip}|${entry.mac}|${entry.interface}|${entry.state}`,
-          entry
-        ])
-      ).values()
-    ];
+    if (pagesVisited >= totalPagesDetected && totalPagesDetected > 0) {
+      paginationCompleted = true;
+    }
+
+    // Deduplicate entries while preserving raw entries
+    const uniqueMap = new Map();
+    for (const entry of allEntries) {
+      const sig = `${entry.ip}|${entry.mac}|${entry.interface}|${entry.state}`;
+      uniqueMap.set(sig, entry);
+    }
+    const deduplicatedEntries = Array.from(uniqueMap.values());
+    const extractionDurationMs = Date.now() - startTime;
+
+    return {
+      entries: deduplicatedEntries,
+      rawEntries: allEntries,
+      telemetry: {
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date().toISOString(),
+        durationMs: extractionDurationMs,
+        totalPagesDetected,
+        pagesVisited,
+        paginationCompleted,
+        pageRows,
+        totalRawEntries: allEntries.length,
+        duplicateCount: Math.max(0, allEntries.length - deduplicatedEntries.length),
+        errors: []
+      }
+    };
   } finally {
     if (context) {
       await context.close().catch(() => { });
@@ -514,8 +673,111 @@ async function isDuplicateOfLatest(newEntries, latestSnapshotId) {
  * @param {number} baseSnapshotId Earlier snapshot
  * @param {number} targetSnapshotId Later / current snapshot
  * @returns {Promise<object>} Comparison details and metrics
+/**
+ * Compares two snapshots to identify:
+ * 1. New MAC addresses
+ * 2. Unobserved MAC addresses (with dormancy explanation)
+ * 3. Changed IP-to-MAC mappings (same IP, different MAC)
+ * 4. Changed MAC-to-IP mappings (same MAC, different IP)
+ * 5. Interface changes (e.g. Port1 -> Port3)
+ * 6. ARP state changes (e.g. Incomplete -> Complete)
+ * 7. Unchanged entries
+ * 
+ * @param {number} baseSnapshotId Earlier snapshot
+ * @param {number} targetSnapshotId Later / current snapshot
+ * @returns {Promise<object>} Comparison details and metrics
  */
 async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
+  // Support in-memory array comparisons for unit testing and offline preview
+  if (Array.isArray(baseSnapshotId) && Array.isArray(targetSnapshotId)) {
+    const baseArg = baseSnapshotId;
+    const targetArg = targetSnapshotId;
+    const normalizeKey = (entry) => {
+      const mac = normalizeMac(entry.mac || entry.mac_address || '');
+      const ip = (entry.ip || entry.ip_address || '').trim();
+      return { mac, ip, iface: entry.interface, state: entry.arp_state };
+    };
+
+    const baseEntries = baseArg.map(normalizeKey);
+    const targetEntries = targetArg.map(normalizeKey);
+
+    const baseMacs = new Set(baseEntries.filter(e => e.mac).map(e => e.mac));
+    const targetMacs = new Set(targetEntries.filter(e => e.mac).map(e => e.mac));
+
+    const newMacs = targetEntries.filter(e => e.mac && !baseMacs.has(e.mac));
+    const unobserved = baseEntries.filter(e => e.mac && !targetMacs.has(e.mac)).map(e => ({
+      ...e,
+      note: 'Unobserved in latest snapshot. Host may be idle, powered off, or subject to ARP cache aging (does not confirm physical removal).'
+    }));
+
+    const baseIpMap = new Map();
+    baseEntries.forEach(e => { if (e.ip && e.mac) baseIpMap.set(e.ip, e); });
+    const changedIpToMac = [];
+    targetEntries.forEach(t => {
+      if (t.ip && t.mac && baseIpMap.has(t.ip)) {
+        const b = baseIpMap.get(t.ip);
+        if (b.mac !== t.mac) {
+          changedIpToMac.push({ ip_address: t.ip, previous_mac: b.mac, current_mac: t.mac });
+        }
+      }
+    });
+
+    const baseMacMap = new Map();
+    baseEntries.forEach(e => { if (e.ip && e.mac) baseMacMap.set(e.mac, e); });
+    const changedMacToIp = [];
+    targetEntries.forEach(t => {
+      if (t.ip && t.mac && baseMacMap.has(t.mac)) {
+        const b = baseMacMap.get(t.mac);
+        if (b.ip !== t.ip) {
+          changedMacToIp.push({ mac_address: t.mac, previous_ip: b.ip, current_ip: t.ip });
+        }
+      }
+    });
+
+    const changedInterface = [];
+    targetEntries.forEach(t => {
+      if (t.ip && t.mac && baseIpMap.has(t.ip)) {
+        const b = baseIpMap.get(t.ip);
+        if (b.mac === t.mac && b.iface && t.iface && b.iface !== t.iface) {
+          changedInterface.push({ ip_address: t.ip, mac_address: t.mac, previous_interface: b.iface, current_interface: t.iface });
+        }
+      }
+    });
+
+    let unchangedCount = 0;
+    targetEntries.forEach(t => {
+      if (t.ip && t.mac && baseIpMap.has(t.ip)) {
+        const b = baseIpMap.get(t.ip);
+        if (b.mac === t.mac && b.iface === t.iface && (b.state || '').toLowerCase() === (t.state || '').toLowerCase()) {
+          unchangedCount++;
+        }
+      }
+    });
+
+    const hasChanges = (newMacs.length + unobserved.length + changedIpToMac.length + changedMacToIp.length + changedInterface.length) > 0;
+
+    return {
+      baseSnapshot: { id: 'memory-base', total_entries: baseArg.length },
+      targetSnapshot: { id: 'memory-target', total_entries: targetArg.length },
+      newMacs,
+      newMacCount: newMacs.length,
+      newCount: newMacs.length,
+      unobserved,
+      unobservedCount: unobserved.length,
+      changedIpToMac,
+      changedIpToMacCount: changedIpToMac.length,
+      ipChangedCount: changedIpToMac.length,
+      changedMacToIp,
+      changedMacToIpCount: changedMacToIp.length,
+      interfaceChanges: changedInterface,
+      interfaceChangesCount: changedInterface.length,
+      interfaceChangedCount: changedInterface.length,
+      unchangedCount,
+      hasChanges,
+      timestamp: new Date().toISOString()
+    };
+  }
+
   const baseRes = await pool.query('SELECT * FROM arp_snapshots WHERE id = $1', [baseSnapshotId]);
   const targetRes = await pool.query('SELECT * FROM arp_snapshots WHERE id = $1', [targetSnapshotId]);
 
@@ -525,7 +787,7 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
 
   // 1. New MACs in target that were not in base
   const newMacsRes = await pool.query(`
-    SELECT DISTINCT d.normalized_mac, d.mac_address, d.ip_address, d.interface, d.arp_state
+    SELECT DISTINCT d.normalized_mac, d.mac_address, d.ip_address, d.interface, d.arp_state, d.discovered_at
     FROM arp_discoveries d
     WHERE d.snapshot_id = $1 AND d.has_mac = TRUE AND d.normalized_mac IS NOT NULL
       AND d.normalized_mac NOT IN (
@@ -535,8 +797,25 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
     ORDER BY d.ip_address ASC
   `, [targetSnapshotId, baseSnapshotId]);
 
-  // 2. Changed IP-to-MAC mappings (same IP, different MAC address)
-  const changedMappingsRes = await pool.query(`
+  // 2. Devices in base that were unobserved in target (with explainable note)
+  const unobservedRawRes = await pool.query(`
+    SELECT DISTINCT b.normalized_mac, b.mac_address, b.ip_address, b.interface, b.arp_state, b.discovered_at
+    FROM arp_discoveries b
+    WHERE b.snapshot_id = $1 AND b.has_mac = TRUE AND b.normalized_mac IS NOT NULL
+      AND b.normalized_mac NOT IN (
+        SELECT t.normalized_mac FROM arp_discoveries t
+        WHERE t.snapshot_id = $2 AND t.has_mac = TRUE AND t.normalized_mac IS NOT NULL
+      )
+    ORDER BY b.ip_address ASC
+  `, [baseSnapshotId, targetSnapshotId]);
+
+  const unobserved = unobservedRawRes.rows.map(row => ({
+    ...row,
+    note: 'Unobserved in latest snapshot. Host may be idle, powered off, or subject to ARP cache aging (does not confirm physical removal).'
+  }));
+
+  // 3. Changed IP-to-MAC mappings (same IP, different MAC address)
+  const changedIpToMacRes = await pool.query(`
     SELECT
       t.ip_address,
       b.mac_address AS previous_mac,
@@ -554,19 +833,58 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
     ORDER BY t.ip_address ASC
   `, [targetSnapshotId, baseSnapshotId]);
 
-  // 3. Devices in base that were unobserved in target
-  const unobservedRes = await pool.query(`
-    SELECT DISTINCT b.normalized_mac, b.mac_address, b.ip_address, b.interface, b.arp_state
-    FROM arp_discoveries b
-    WHERE b.snapshot_id = $1 AND b.has_mac = TRUE AND b.normalized_mac IS NOT NULL
-      AND b.normalized_mac NOT IN (
-        SELECT t.normalized_mac FROM arp_discoveries t
-        WHERE t.snapshot_id = $2 AND t.has_mac = TRUE AND t.normalized_mac IS NOT NULL
-      )
-    ORDER BY b.ip_address ASC
-  `, [baseSnapshotId, targetSnapshotId]);
+  // 4. Changed MAC-to-IP mappings (same MAC, different IP address)
+  const changedMacToIpRes = await pool.query(`
+    SELECT
+      t.mac_address,
+      t.normalized_mac,
+      b.ip_address AS previous_ip,
+      t.ip_address AS current_ip,
+      b.interface AS previous_interface,
+      t.interface AS current_interface,
+      t.discovered_at AS observed_at
+    FROM arp_discoveries t
+    JOIN arp_discoveries b ON t.normalized_mac = b.normalized_mac
+    WHERE t.snapshot_id = $1 AND b.snapshot_id = $2
+      AND t.has_mac = TRUE AND b.has_mac = TRUE
+      AND t.ip_address != b.ip_address
+    ORDER BY t.mac_address ASC
+  `, [targetSnapshotId, baseSnapshotId]);
 
-  // 4. Stable / unchanged devices
+  // 5. Interface changes (same MAC & IP, changed firewall interface)
+  const interfaceChangesRes = await pool.query(`
+    SELECT
+      t.ip_address,
+      t.mac_address,
+      t.normalized_mac,
+      b.interface AS previous_interface,
+      t.interface AS current_interface,
+      t.discovered_at AS observed_at
+    FROM arp_discoveries t
+    JOIN arp_discoveries b ON t.ip_address = b.ip_address AND t.normalized_mac = b.normalized_mac
+    WHERE t.snapshot_id = $1 AND b.snapshot_id = $2
+      AND t.interface != b.interface
+    ORDER BY t.ip_address ASC
+  `, [targetSnapshotId, baseSnapshotId]);
+
+  // 6. ARP state changes (same IP, changed ARP state, e.g. Incomplete -> Complete)
+  const arpStateChangesRes = await pool.query(`
+    SELECT
+      t.ip_address,
+      t.mac_address,
+      t.normalized_mac,
+      t.interface,
+      b.arp_state AS previous_state,
+      t.arp_state AS current_state,
+      t.discovered_at AS observed_at
+    FROM arp_discoveries t
+    JOIN arp_discoveries b ON t.ip_address = b.ip_address
+    WHERE t.snapshot_id = $1 AND b.snapshot_id = $2
+      AND LOWER(COALESCE(t.arp_state, '')) != LOWER(COALESCE(b.arp_state, ''))
+    ORDER BY t.ip_address ASC
+  `, [targetSnapshotId, baseSnapshotId]);
+
+  // 7. Stable / unchanged devices
   const unchangedRes = await pool.query(`
     SELECT count(*) AS count
     FROM arp_discoveries t
@@ -574,6 +892,8 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
     WHERE t.snapshot_id = $1 AND b.snapshot_id = $2
       AND t.has_mac = TRUE AND b.has_mac = TRUE
       AND t.normalized_mac = b.normalized_mac
+      AND t.interface = b.interface
+      AND LOWER(COALESCE(t.arp_state, '')) = LOWER(COALESCE(b.arp_state, ''))
   `, [targetSnapshotId, baseSnapshotId]);
 
   return {
@@ -581,11 +901,23 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
     targetSnapshot: targetRes.rows[0],
     newMacs: newMacsRes.rows,
     newMacCount: newMacsRes.rows.length,
-    changedMappings: changedMappingsRes.rows,
-    changedMappingCount: changedMappingsRes.rows.length,
-    unobserved: unobservedRes.rows,
-    unobservedCount: unobservedRes.rows.length,
+    newCount: newMacsRes.rows.length,
+    changedMappings: changedIpToMacRes.rows,
+    changedMappingCount: changedIpToMacRes.rows.length,
+    changedIpToMac: changedIpToMacRes.rows,
+    changedIpToMacCount: changedIpToMacRes.rows.length,
+    ipChangedCount: changedIpToMacRes.rows.length,
+    changedMacToIp: changedMacToIpRes.rows,
+    changedMacToIpCount: changedMacToIpRes.rows.length,
+    interfaceChanges: interfaceChangesRes.rows,
+    interfaceChangesCount: interfaceChangesRes.rows.length,
+    interfaceChangedCount: interfaceChangesRes.rows.length,
+    arpStateChanges: arpStateChangesRes.rows,
+    arpStateChangesCount: arpStateChangesRes.rows.length,
+    unobserved,
+    unobservedCount: unobserved.length,
     unchangedCount: parseInt(unchangedRes.rows[0].count, 10),
+    hasChanges: (newMacsRes.rows.length + unobserved.length + changedIpToMacRes.rows.length + changedMacToIpRes.rows.length + interfaceChangesRes.rows.length) > 0,
     timestamp: new Date().toISOString()
   };
 }
@@ -618,9 +950,9 @@ async function runArpPollingCycle(options = {}) {
     const lastSuccessfulSnapId = latestSummaryBefore ? latestSummaryBefore.id : null;
 
     // 1. Extraction phase
-    let entries;
+    let extraction;
     try {
-      entries = await extractFromSophosBrowser(options);
+      extraction = await extractFromSophosBrowser(options);
     } catch (extractErr) {
       const durationMs = Date.now() - startTime;
       console.error(`[SophosPoller] Extraction failed: ${extractErr.message}. Preserving last successful snapshot (#${lastSuccessfulSnapId || 'none'}).`);
@@ -643,26 +975,45 @@ async function runArpPollingCycle(options = {}) {
       };
     }
 
-    // 2. Validation phase
-    const validation = validateExtractedSnapshot(entries);
+    const entries = Array.isArray(extraction) ? extraction : extraction.entries;
+    const rawEntries = extraction.rawEntries || entries;
+    const telemetry = extraction.telemetry || {
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date().toISOString(),
+      durationMs: Date.now() - startTime,
+      totalPagesDetected: 1,
+      pagesVisited: 1,
+      paginationCompleted: true,
+      pageRows: [{ page: 1, rows: entries.length }],
+      totalRawEntries: rawEntries.length,
+      duplicateCount: Math.max(0, rawEntries.length - entries.length),
+      errors: []
+    };
+
+    // 2. Mandatory Validation & Completeness Check
+    const validation = validateExtractedSnapshot(entries, telemetry, latestSummaryBefore);
     if (!validation.valid) {
       const errMsg = validation.errors.join('; ');
       const durationMs = Date.now() - startTime;
-      console.error(`[SophosPoller] Validation failed: ${errMsg}. Preserving last successful snapshot (#${lastSuccessfulSnapId || 'none'}).`);
+      console.error(`[SophosPoller] Extraction integrity verification failed [${validation.status}]: ${errMsg}. Preserving last successful snapshot (#${lastSuccessfulSnapId || 'none'}).`);
       if (!options.dryRun) {
         await recordPollFailure(errMsg, durationMs);
       }
       lastPollerRun = {
         timestamp: new Date().toISOString(),
         success: false,
+        status: validation.status,
         durationMs,
         snapshotId: lastSuccessfulSnapId,
         error: errMsg,
+        warnings: validation.warnings,
         summary: null
       };
       return {
         success: false,
+        status: validation.status,
         error: errMsg,
+        warnings: validation.warnings,
         preservedSnapshotId: lastSuccessfulSnapId,
         durationMs
       };
@@ -694,7 +1045,7 @@ async function runArpPollingCycle(options = {}) {
       };
     }
 
-    // 4. Import phase
+    // 4. Import phase with full verification and audit metadata
     const snapshotName = options.snapshotName || `Sophos Automated Snapshot ${new Date().toLocaleString()}`;
     const importResult = await importArpSnapshot(
       {
@@ -706,7 +1057,15 @@ async function runArpPollingCycle(options = {}) {
       {
         snapshotName,
         sourceDevice: 'Sophos XGS2100',
-        dryRun: Boolean(options.dryRun)
+        dryRun: Boolean(options.dryRun),
+        telemetry: {
+          ...telemetry,
+          durationMs: Date.now() - startTime,
+          warnings: validation.warnings,
+          status: validation.status
+        },
+        rawPayload: rawEntries,
+        extractionStatus: validation.status
       }
     );
 
@@ -726,7 +1085,7 @@ async function runArpPollingCycle(options = {}) {
     const unobservedCount = comparison ? comparison.unobservedCount : 0;
 
     console.log(
-      `[SophosPoller] Cycle completed: Snapshot #${importResult.snapshotId} (${importResult.totalEntries} entries, ${importResult.entriesWithMac} with MAC) | ${newMacCount} new MACs | ${changedMappingCount} IP-MAC changes | ${unobservedCount} unobserved | ${durationMs}ms`
+      `[SophosPoller] Cycle completed [${validation.status}]: Snapshot #${importResult.snapshotId} (${importResult.totalEntries} entries, ${importResult.entriesWithMac} with MAC) | ${newMacCount} new MACs | ${changedMappingCount} IP-MAC changes | ${unobservedCount} unobserved | ${durationMs}ms`
     );
 
     if (!options.dryRun) {
@@ -736,9 +1095,11 @@ async function runArpPollingCycle(options = {}) {
     lastPollerRun = {
       timestamp: new Date().toISOString(),
       success: true,
+      status: validation.status,
       durationMs,
       snapshotId: importResult.snapshotId,
       error: null,
+      warnings: validation.warnings,
       summary: {
         totalEntries: importResult.totalEntries,
         entriesWithMac: importResult.entriesWithMac,
@@ -750,9 +1111,11 @@ async function runArpPollingCycle(options = {}) {
 
     return {
       success: true,
+      status: validation.status,
       snapshotId: importResult.snapshotId,
       totalEntries: importResult.totalEntries,
       entriesWithMac: importResult.entriesWithMac,
+      warnings: validation.warnings,
       comparison,
       durationMs
     };

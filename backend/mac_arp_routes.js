@@ -337,13 +337,17 @@ router.get('/api/arp/snapshots/:id/details', async (req, res) => {
 // 5c. GET /api/arp/snapshots/:id/export
 // Download snapshot entries as CSV or JSON file (supports :id as 'latest' or integer)
 // ---------------------------------------------------------------------
-router.get('/api/arp/snapshots/:id/export', async (req, res) => {
+// ---------------------------------------------------------------------
+// 5c. GET /api/arp/snapshots/:id/audit
+// Returns extraction integrity telemetry, page tracking breakdown, and verification statistics
+// ---------------------------------------------------------------------
+router.get('/api/arp/snapshots/:id/audit', async (req, res) => {
   try {
     let snapshotId;
     if (req.params.id === 'latest') {
-      const latestRes = await pool.query('SELECT id, snapshot_name, imported_at FROM arp_snapshots ORDER BY id DESC LIMIT 1');
+      const latestRes = await pool.query('SELECT id FROM arp_snapshots ORDER BY id DESC LIMIT 1');
       if (latestRes.rows.length === 0) {
-        return res.status(404).json({ error: 'No ARP snapshots found in database' });
+        return res.status(404).json({ error: 'No ARP snapshots found' });
       }
       snapshotId = latestRes.rows[0].id;
     } else {
@@ -359,31 +363,195 @@ router.get('/api/arp/snapshots/:id/export', async (req, res) => {
     }
     const snapshot = snapRes.rows[0];
 
+    const statsRes = await pool.query(
+      `SELECT
+        COUNT(*) AS total_count,
+        COUNT(*) FILTER (WHERE verification_status = 'verified') AS verified_count,
+        COUNT(*) FILTER (WHERE verification_status = 'verified_incomplete') AS incomplete_count,
+        COUNT(*) FILTER (WHERE verification_status = 'flagged') AS flagged_count,
+        COUNT(*) FILTER (WHERE verification_status = 'rejected') AS rejected_count,
+        COUNT(*) FILTER (WHERE has_conflict = TRUE) AS conflict_count,
+        COUNT(*) FILTER (WHERE is_duplicate_ip = TRUE) AS duplicate_ip_count,
+        COUNT(*) FILTER (WHERE is_duplicate_mac = TRUE) AS duplicate_mac_count,
+        COUNT(*) FILTER (WHERE has_mac = TRUE) AS with_mac_count,
+        COUNT(*) FILTER (WHERE matched_inventory_id IS NOT NULL) AS matched_inventory_count
+       FROM arp_discoveries
+       WHERE snapshot_id = $1`,
+      [snapshotId]
+    );
+
+    const counts = statsRes.rows[0];
+
+    res.json({
+      snapshotId,
+      snapshotName: snapshot.snapshot_name,
+      importedAt: snapshot.imported_at,
+      sourceDevice: snapshot.source_device,
+      extractionStatus: snapshot.extraction_status || 'complete',
+      telemetry: {
+        totalPagesDetected: snapshot.total_pages_detected || 1,
+        pagesVisited: snapshot.pages_visited || 1,
+        paginationCompleted: Boolean(snapshot.pagination_completed),
+        pageRows: snapshot.page_rows_json || [],
+        totalRawEntries: snapshot.total_raw_entries || snapshot.total_entries,
+        validIpCount: snapshot.valid_ip_count || counts.total_count,
+        validMacCount: snapshot.valid_mac_count || counts.with_mac_count,
+        incompleteCount: snapshot.incomplete_count || counts.incomplete_count,
+        invalidCount: snapshot.invalid_count || counts.rejected_count,
+        duplicateCount: snapshot.duplicate_count || 0,
+        extractionDurationMs: snapshot.extraction_duration_ms || 0,
+        integrityWarnings: snapshot.integrity_warnings || []
+      },
+      audit: {
+        totalDiscoveries: parseInt(counts.total_count, 10),
+        verified: parseInt(counts.verified_count, 10),
+        verifiedIncomplete: parseInt(counts.incomplete_count, 10),
+        flaggedConflicts: parseInt(counts.flagged_count, 10),
+        rejected: parseInt(counts.rejected_count, 10),
+        hasConflictTotal: parseInt(counts.conflict_count, 10),
+        duplicateIps: parseInt(counts.duplicate_ip_count, 10),
+        duplicateMacs: parseInt(counts.duplicate_mac_count, 10),
+        matchedInventory: parseInt(counts.matched_inventory_count, 10)
+      }
+    });
+  } catch (err) {
+    console.error('Fetch snapshot audit failed:', err.message);
+    res.status(500).json({ error: 'Could not fetch snapshot audit report' });
+  }
+});
+
+// Helper for CSV escaping
+const escapeCsv = (val) => {
+  if (val === null || val === undefined) return '';
+  const str = String(val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
+
+// ---------------------------------------------------------------------
+// 5d. GET /api/arp/snapshots/:id/raw-export
+// Export raw, untouched firewall extraction records
+// ---------------------------------------------------------------------
+router.get('/api/arp/snapshots/:id/raw-export', async (req, res) => {
+  try {
+    let snapshotId;
+    if (req.params.id === 'latest') {
+      const latestRes = await pool.query('SELECT id, snapshot_name, imported_at, raw_payload_json FROM arp_snapshots ORDER BY id DESC LIMIT 1');
+      if (latestRes.rows.length === 0) return res.status(404).json({ error: 'No snapshots found' });
+      snapshotId = latestRes.rows[0].id;
+    } else {
+      snapshotId = Number(req.params.id);
+      if (!Number.isInteger(snapshotId) || snapshotId < 1) return res.status(400).json({ error: 'Invalid snapshot ID' });
+    }
+
+    const snapRes = await pool.query('SELECT * FROM arp_snapshots WHERE id = $1', [snapshotId]);
+    if (snapRes.rows.length === 0) return res.status(404).json({ error: 'Snapshot not found' });
+    const snapshot = snapRes.rows[0];
+
+    let rawRecords = snapshot.raw_payload_json;
+    if (!rawRecords || !Array.isArray(rawRecords) || rawRecords.length === 0) {
+      // Reconstruct raw records from discoveries
+      const discRes = await pool.query(
+        'SELECT ip_address AS ip, mac_address AS mac, interface, arp_state AS state FROM arp_discoveries WHERE snapshot_id = $1 ORDER BY id ASC',
+        [snapshotId]
+      );
+      rawRecords = discRes.rows;
+    }
+
+    const format = (req.query.format || 'csv').toLowerCase();
+    const dateStr = new Date(snapshot.imported_at).toISOString().slice(0, 10);
+
+    if (format === 'json') {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="sophos_raw_extraction_${snapshotId}_${dateStr}.json"`);
+      return res.json({
+        type: 'RAW_SOPHOS_FIREWALL_EXTRACTION',
+        snapshotId,
+        snapshotName: snapshot.snapshot_name,
+        extractedAt: snapshot.imported_at,
+        totalRawEntries: rawRecords.length,
+        rawRecords
+      });
+    }
+
+    // CSV format
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="sophos_raw_extraction_${snapshotId}_${dateStr}.csv"`);
+    let csv = ['Raw IP Address', 'Raw MAC Address', 'Interface', 'Firewall ARP State'].join(',') + '\r\n';
+    for (const r of rawRecords) {
+      csv += [
+        escapeCsv(r.ip || r.ip_address || ''),
+        escapeCsv(r.mac || r.mac_address || '-'),
+        escapeCsv(r.interface || 'Unknown'),
+        escapeCsv(r.state || r.arp_state || 'UNKNOWN')
+      ].join(',') + '\r\n';
+    }
+    res.send(csv);
+  } catch (err) {
+    console.error('Raw export failed:', err.message);
+    res.status(500).json({ error: 'Failed to export raw extraction' });
+  }
+});
+
+// ---------------------------------------------------------------------
+// 5e. GET /api/arp/snapshots/:id/verified-export
+// Export validated snapshot entries with full audit classifications & reasons
+// ---------------------------------------------------------------------
+router.get('/api/arp/snapshots/:id/verified-export', async (req, res) => {
+  try {
+    let snapshotId;
+    if (req.params.id === 'latest') {
+      const latestRes = await pool.query('SELECT id, snapshot_name, imported_at FROM arp_snapshots ORDER BY id DESC LIMIT 1');
+      if (latestRes.rows.length === 0) return res.status(404).json({ error: 'No snapshots found' });
+      snapshotId = latestRes.rows[0].id;
+    } else {
+      snapshotId = Number(req.params.id);
+      if (!Number.isInteger(snapshotId) || snapshotId < 1) return res.status(400).json({ error: 'Invalid snapshot ID' });
+    }
+
+    const snapRes = await pool.query('SELECT * FROM arp_snapshots WHERE id = $1', [snapshotId]);
+    if (snapRes.rows.length === 0) return res.status(404).json({ error: 'Snapshot not found' });
+    const snapshot = snapRes.rows[0];
+
     const entriesRes = await pool.query(
-      `SELECT 
+      `SELECT
         d.ip_address,
         d.mac_address,
+        d.normalized_mac,
         d.interface,
         d.arp_state,
-        CASE
-          WHEN inv.id IS NOT NULL AND reg.id IS NOT NULL THEN 'Matched (Inventory & Registered)'
-          WHEN reg.id IS NOT NULL THEN 'Matched (Registered Node)'
-          WHEN inv.id IS NOT NULL THEN 'Matched (MAC Inventory)'
-          WHEN d.has_mac = false THEN 'No MAC'
-          ELSE 'Unmatched / Discovered'
-        END AS overall_status,
-        d.match_status AS mac_inventory_match,
-        inv.device_name AS mac_inventory_name,
+        d.verification_status,
+        d.has_conflict,
+        d.is_duplicate_ip,
+        d.is_duplicate_mac,
+        d.is_incomplete,
+        d.verification_reasons,
+        d.match_status AS inventory_match_status,
+        inv.device_name AS inventory_device_name,
         inv.department_location,
+        inv.expected_ip AS inventory_expected_ip,
+        reg.id AS registered_device_id,
         reg.name AS registered_device_name,
         reg.device_type AS registered_device_type,
+        p.status AS ping_status,
+        p.latency_ms AS ping_latency,
+        p.checked_at AS ping_checked_at,
         d.discovered_at
        FROM arp_discoveries d
        LEFT JOIN mac_inventory inv ON inv.id = d.matched_inventory_id
        LEFT JOIN devices reg ON (
          (reg.ip_address IS NOT NULL AND reg.ip_address = d.ip_address)
-         OR (reg.mac_address IS NOT NULL AND LOWER(REPLACE(reg.mac_address, ':', '')) = d.normalized_mac)
+         OR (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND UPPER(REPLACE(REPLACE(reg.mac_address, ':', ''), '-', '')) = d.normalized_mac)
        )
+       LEFT JOIN LATERAL (
+         SELECT status, latency_ms, checked_at
+         FROM status_history
+         WHERE device_id = reg.id
+         ORDER BY checked_at DESC
+         LIMIT 1
+       ) p ON true
        WHERE d.snapshot_id = $1
        ORDER BY d.ip_address ASC, d.id ASC`,
       [snapshotId]
@@ -393,67 +561,147 @@ router.get('/api/arp/snapshots/:id/export', async (req, res) => {
     const dateStr = new Date(snapshot.imported_at).toISOString().slice(0, 10);
 
     if (format === 'json') {
-      const filename = `sophos_arp_snapshot_${snapshotId}_${dateStr}.json`;
       res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Disposition', `attachment; filename="sophos_verified_snapshot_${snapshotId}_${dateStr}.json"`);
       return res.json({
+        type: 'VALIDATED_ARP_SNAPSHOT_AUDIT',
         snapshot,
         totalEntries: entriesRes.rows.length,
-        entries: entriesRes.rows,
+        entries: entriesRes.rows
       });
     }
 
     // Default to CSV
-    const filename = `sophos_arp_snapshot_${snapshotId}_${dateStr}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="sophos_verified_snapshot_${snapshotId}_${dateStr}.csv"`);
 
     const headers = [
       'IP Address',
       'MAC Address',
+      'Normalized MAC',
       'Interface',
-      'ARP State',
-      'Overall Status',
-      'MAC Inventory Match',
+      'ARP Cache State',
+      'Verification Status',
+      'Conflict Detected',
+      'Duplicate IP Flag',
+      'Duplicate MAC Flag',
+      'Incomplete ARP Flag',
+      'Verification Reasons',
+      'Inventory Match Status',
       'MAC Inventory Device Name',
       'Department / Location',
-      'Registered Device Name',
-      'Device Type',
-      'Discovered At',
+      'Inventory Expected IP',
+      'Registered Node Name',
+      'Registered Node Type',
+      'Decoupled Ping Reachability',
+      'Ping Latency (ms)',
+      'Ping Last Checked At',
+      'Discovered At'
     ];
-
-    const escapeCsv = (val) => {
-      if (val === null || val === undefined) return '';
-      const str = String(val);
-      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
 
     let csvContent = headers.join(',') + '\r\n';
     for (const row of entriesRes.rows) {
+      const reasonsStr = Array.isArray(row.verification_reasons)
+        ? row.verification_reasons.join('; ')
+        : (row.verification_reasons ? JSON.stringify(row.verification_reasons) : '');
+
       const cols = [
         escapeCsv(row.ip_address),
         escapeCsv(row.mac_address),
+        escapeCsv(row.normalized_mac),
         escapeCsv(row.interface),
         escapeCsv(row.arp_state),
-        escapeCsv(row.overall_status),
-        escapeCsv(row.mac_inventory_match),
-        escapeCsv(row.mac_inventory_name),
+        escapeCsv(row.verification_status),
+        escapeCsv(row.has_conflict ? 'YES' : 'NO'),
+        escapeCsv(row.is_duplicate_ip ? 'YES' : 'NO'),
+        escapeCsv(row.is_duplicate_mac ? 'YES' : 'NO'),
+        escapeCsv(row.is_incomplete ? 'YES' : 'NO'),
+        escapeCsv(reasonsStr),
+        escapeCsv(row.inventory_match_status),
+        escapeCsv(row.inventory_device_name),
         escapeCsv(row.department_location),
+        escapeCsv(row.inventory_expected_ip),
         escapeCsv(row.registered_device_name),
         escapeCsv(row.registered_device_type),
-        escapeCsv(row.discovered_at ? new Date(row.discovered_at).toLocaleString() : ''),
+        escapeCsv(row.ping_status || 'UNKNOWN / NOT PROBED'),
+        escapeCsv(row.ping_latency !== null && row.ping_latency !== undefined ? row.ping_latency : ''),
+        escapeCsv(row.ping_checked_at ? new Date(row.ping_checked_at).toLocaleString() : ''),
+        escapeCsv(row.discovered_at ? new Date(row.discovered_at).toLocaleString() : '')
       ];
       csvContent += cols.join(',') + '\r\n';
     }
 
     res.send(csvContent);
   } catch (err) {
-    console.error('Export snapshot failed:', err.message);
-    res.status(500).json({ error: 'Could not export snapshot' });
+    console.error('Verified export failed:', err.message);
+    res.status(500).json({ error: 'Could not export verified snapshot' });
   }
+});
+
+// ---------------------------------------------------------------------
+// 5f. GET /api/arp/snapshots/compare/export
+// Download snapshot delta comparison as CSV or JSON
+// ---------------------------------------------------------------------
+router.get('/api/arp/snapshots/compare/export', async (req, res) => {
+  try {
+    let { base_id, target_id, format } = req.query;
+    if (!base_id || !target_id) {
+      const snapsRes = await pool.query('SELECT id FROM arp_snapshots ORDER BY id DESC LIMIT 2');
+      if (snapsRes.rows.length < 2) return res.status(400).json({ error: 'At least two snapshots required' });
+      target_id = snapsRes.rows[0].id;
+      base_id = snapsRes.rows[1].id;
+    }
+
+    const { compareSnapshots } = require('./sophos_arp_service');
+    const diff = await compareSnapshots(Number(base_id), Number(target_id));
+    const exportFormat = (format || 'csv').toLowerCase();
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (exportFormat === 'json') {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="snapshot_comparison_${base_id}_vs_${target_id}_${dateStr}.json"`);
+      return res.json(diff);
+    }
+
+    // CSV format
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="snapshot_comparison_${base_id}_vs_${target_id}_${dateStr}.csv"`);
+
+    let csv = ['Delta Category', 'IP Address', 'MAC Address', 'Interface', 'Previous Value', 'Current Value', 'Observed At / Note'].join(',') + '\r\n';
+
+    for (const item of (diff.newMacs || [])) {
+      csv += ['NEW_DISCOVERY', escapeCsv(item.ip_address), escapeCsv(item.mac_address), escapeCsv(item.interface), '-', 'Observed in target', escapeCsv(item.discovered_at || '')].join(',') + '\r\n';
+    }
+    for (const item of (diff.changedIpToMac || [])) {
+      csv += ['IP_TO_MAC_CHANGE', escapeCsv(item.ip_address), escapeCsv(item.current_mac), escapeCsv(item.current_interface), escapeCsv(item.previous_mac), escapeCsv(item.current_mac), escapeCsv(item.observed_at || '')].join(',') + '\r\n';
+    }
+    for (const item of (diff.changedMacToIp || [])) {
+      csv += ['MAC_TO_IP_CHANGE', escapeCsv(item.current_ip), escapeCsv(item.mac_address), escapeCsv(item.current_interface), escapeCsv(item.previous_ip), escapeCsv(item.current_ip), escapeCsv(item.observed_at || '')].join(',') + '\r\n';
+    }
+    for (const item of (diff.interfaceChanges || [])) {
+      csv += ['INTERFACE_CHANGE', escapeCsv(item.ip_address), escapeCsv(item.mac_address), escapeCsv(item.current_interface), escapeCsv(item.previous_interface), escapeCsv(item.current_interface), escapeCsv(item.observed_at || '')].join(',') + '\r\n';
+    }
+    for (const item of (diff.arpStateChanges || [])) {
+      csv += ['ARP_STATE_CHANGE', escapeCsv(item.ip_address), escapeCsv(item.mac_address), escapeCsv(item.interface), escapeCsv(item.previous_state), escapeCsv(item.current_state), escapeCsv(item.observed_at || '')].join(',') + '\r\n';
+    }
+    for (const item of (diff.unobserved || [])) {
+      csv += ['UNOBSERVED', escapeCsv(item.ip_address), escapeCsv(item.mac_address), escapeCsv(item.interface), 'Present in base snapshot', 'Unobserved in target', escapeCsv(item.note)].join(',') + '\r\n';
+    }
+
+    res.send(csv);
+  } catch (err) {
+    console.error('Comparison export failed:', err.message);
+    res.status(500).json({ error: 'Could not export comparison diff' });
+  }
+});
+
+// ---------------------------------------------------------------------
+// 5g. GET /api/arp/snapshots/:id/export (Legacy compatibility)
+// ---------------------------------------------------------------------
+router.get('/api/arp/snapshots/:id/export', async (req, res) => {
+  // Delegate to verified-export
+  req.url = req.url.replace('/export', '/verified-export');
+  return router.handle(req, res);
 });
 
 // ---------------------------------------------------------------------
@@ -526,15 +774,25 @@ router.post('/api/arp/snapshots/import-json', async (req, res) => {
 
 // ---------------------------------------------------------------------
 // 7. GET /api/arp/discoveries
-// List discoveries with filters
+// List discoveries with comprehensive verification, inventory, and ping reachability filters
 // ---------------------------------------------------------------------
 router.get('/api/arp/discoveries', async (req, res) => {
   try {
-    const { snapshot_id, match_status, interface: iface, arp_state, search } = req.query;
+    const {
+      snapshot_id,
+      match_status,
+      interface: iface,
+      arp_state,
+      search,
+      verification_status,
+      has_conflict,
+      ping_status,
+      registered_match
+    } = req.query;
 
     let targetSnapshotId = snapshot_id ? Number(snapshot_id) : null;
     if (!targetSnapshotId) {
-      const latestSnapRes = await pool.query('SELECT id FROM arp_snapshots ORDER BY imported_at DESC LIMIT 1');
+      const latestSnapRes = await pool.query('SELECT id FROM arp_snapshots ORDER BY id DESC LIMIT 1');
       if (latestSnapRes.rows.length > 0) {
         targetSnapshotId = latestSnapRes.rows[0].id;
       }
@@ -556,17 +814,42 @@ router.get('/api/arp/discoveries', async (req, res) => {
         d.is_router_entry,
         d.has_mac,
         d.match_status,
+        d.is_valid_ipv4,
+        d.is_valid_mac,
+        d.is_incomplete,
+        d.is_duplicate_ip,
+        d.is_duplicate_mac,
+        d.has_conflict,
+        d.verification_status,
+        d.verification_reasons,
         d.discovered_at,
         inv.device_name AS inventory_device_name,
         inv.department_location AS inventory_location,
         inv.site_station AS inventory_site,
         inv.expected_ip AS inventory_expected_ip,
+        reg.id AS registered_device_id,
+        reg.name AS registered_device_name,
+        reg.device_type AS registered_device_type,
+        p.status AS ping_status,
+        p.latency_ms AS ping_latency,
+        p.checked_at AS ping_checked_at,
         s.snapshot_name
       FROM arp_discoveries d
       JOIN arp_snapshots s ON s.id = d.snapshot_id
       LEFT JOIN mac_inventory inv ON inv.id = d.matched_inventory_id
+      LEFT JOIN devices reg ON (
+        (reg.ip_address IS NOT NULL AND reg.ip_address = d.ip_address)
+        OR (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND UPPER(REPLACE(REPLACE(reg.mac_address, ':', ''), '-', '')) = d.normalized_mac)
+      )
+      LEFT JOIN LATERAL (
+        SELECT status, latency_ms, checked_at
+        FROM status_history
+        WHERE device_id = reg.id
+        ORDER BY checked_at DESC
+        LIMIT 1
+      ) p ON true
       WHERE d.snapshot_id = $1
-      ORDER BY d.id ASC
+      ORDER BY d.ip_address ASC, d.id ASC
     `;
 
     const result = await pool.query(query, [targetSnapshotId]);
@@ -577,6 +860,8 @@ router.get('/api/arp/discoveries', async (req, res) => {
     const cleanMatch = (match_status && match_status !== 'ALL' && match_status !== 'undefined' && match_status !== 'null') ? match_status : null;
     const cleanIface = (iface && iface !== 'ALL' && iface !== 'undefined' && iface !== 'null') ? iface : null;
     const cleanState = (arp_state && arp_state !== 'ALL' && arp_state !== 'undefined' && arp_state !== 'null') ? arp_state : null;
+    const cleanVerif = (verification_status && verification_status !== 'ALL' && verification_status !== 'undefined' && verification_status !== 'null') ? verification_status : null;
+    const cleanPing = (ping_status && ping_status !== 'ALL' && ping_status !== 'undefined' && ping_status !== 'null') ? ping_status.toUpperCase() : null;
 
     if (cleanSearch) {
       items = items.filter(i =>
@@ -585,8 +870,31 @@ router.get('/api/arp/discoveries', async (req, res) => {
         (i.normalized_mac && i.normalized_mac.toLowerCase().includes(cleanSearch)) ||
         (i.interface && i.interface.toLowerCase().includes(cleanSearch)) ||
         (i.inventory_device_name && i.inventory_device_name.toLowerCase().includes(cleanSearch)) ||
+        (i.registered_device_name && i.registered_device_name.toLowerCase().includes(cleanSearch)) ||
         (i.inventory_location && i.inventory_location.toLowerCase().includes(cleanSearch))
       );
+    }
+
+    if (cleanVerif) {
+      items = items.filter(i => (i.verification_status || '').toLowerCase() === cleanVerif.toLowerCase());
+    }
+
+    if (has_conflict && has_conflict !== 'ALL') {
+      const conflictBool = has_conflict === 'true' || has_conflict === true;
+      items = items.filter(i => Boolean(i.has_conflict) === conflictBool);
+    }
+
+    if (registered_match && registered_match !== 'ALL') {
+      const isReg = registered_match === 'yes' || registered_match === 'true';
+      items = items.filter(i => Boolean(i.registered_device_id) === isReg);
+    }
+
+    if (cleanPing) {
+      if (cleanPing === 'UNKNOWN') {
+        items = items.filter(i => !i.ping_status || i.ping_status.toUpperCase() === 'UNKNOWN');
+      } else {
+        items = items.filter(i => (i.ping_status || '').toUpperCase() === cleanPing);
+      }
     }
 
     if (cleanMatch) {
@@ -606,6 +914,10 @@ router.get('/api/arp/discoveries', async (req, res) => {
     }
 
     const totalCount = result.rows.length;
+    const verifiedCount = result.rows.filter(i => i.verification_status === 'verified').length;
+    const incompleteCount = result.rows.filter(i => i.verification_status === 'verified_incomplete').length;
+    const flaggedCount = result.rows.filter(i => i.verification_status === 'flagged').length;
+    const rejectedCount = result.rows.filter(i => i.verification_status === 'rejected').length;
     const matchedCount = result.rows.filter(i => i.match_status === 'matched').length;
     const unmatchedCount = result.rows.filter(i => i.match_status === 'unmatched').length;
     const noMacCount = result.rows.filter(i => i.match_status === 'no_mac').length;
@@ -615,6 +927,10 @@ router.get('/api/arp/discoveries', async (req, res) => {
       filteredCount: items.length,
       summary: {
         total_entries: totalCount,
+        verified: verifiedCount,
+        verified_incomplete: incompleteCount,
+        flagged: flaggedCount,
+        rejected: rejectedCount,
         matched: matchedCount,
         unmatched: unmatchedCount,
         no_mac_failed: noMacCount

@@ -242,6 +242,22 @@ class ApiService {
     return this.request('/api/arp/poller/poll-now', { method: 'POST' });
   }
 
+  async getSnapshotAudit(id) {
+    return this.request(`/api/arp/snapshots/${id}/audit`, { method: 'GET' }, `arp-audit-${id}`);
+  }
+
+  getRawExportUrl(id, format = 'csv') {
+    return `${this.baseUrl}/api/arp/snapshots/${id}/raw-export?format=${format}`;
+  }
+
+  getVerifiedExportUrl(id, format = 'csv') {
+    return `${this.baseUrl}/api/arp/snapshots/${id}/verified-export?format=${format}`;
+  }
+
+  getCompareExportUrl(baseId, targetId, format = 'csv') {
+    return `${this.baseUrl}/api/arp/snapshots/compare/export?base_id=${baseId}&target_id=${targetId}&format=${format}`;
+  }
+
   /**
    * 9. Discovered Devices Monitoring & Direct Editing
    */

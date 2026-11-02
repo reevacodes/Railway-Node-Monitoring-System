@@ -231,14 +231,35 @@ function parseArpSnapshot(input) {
     });
   }
 
+  // Detect duplicate IPs and MACs within snapshot
+  const seenIps = new Set();
+  const seenMacs = new Set();
+  let duplicateCount = 0;
+  for (const item of parsedEntries) {
+    if (item.ip_address) {
+      if (seenIps.has(item.ip_address)) duplicateCount++;
+      else seenIps.add(item.ip_address);
+    }
+    if (item.normalized_mac) {
+      if (seenMacs.has(item.normalized_mac)) duplicateCount++;
+      else seenMacs.add(item.normalized_mac);
+    }
+  }
+
   return {
     metadata,
     entries: parsedEntries,
+    rawEntries,
     stats: {
       total: parsedEntries.length,
       withMac: entriesWithMac,
       incomplete: incompleteCount,
-      invalidIp: invalidIpCount
+      invalidIp: invalidIpCount,
+      duplicateCount
+    },
+    telemetry: {
+      duplicateCount,
+      totalRawEntries: rawEntries.length
     }
   };
 }
@@ -276,22 +297,93 @@ async function importArpSnapshot(input, options = {}) {
       await client.query('BEGIN');
     }
 
-    // 1. Fetch current MAC inventory lookup map (read-only, does not mutate inventory)
+    // 1. Fetch current MAC inventory and registered devices lookup maps
     const invRes = await client.query(
-      'SELECT id, normalized_mac, device_name, department_location FROM mac_inventory WHERE normalized_mac IS NOT NULL'
+      'SELECT id, normalized_mac, device_name, department_location, expected_ip FROM mac_inventory WHERE normalized_mac IS NOT NULL'
     );
     const invMap = new Map();
     invRes.rows.forEach(row => {
       invMap.set(row.normalized_mac, row);
     });
 
-    // 2. Insert arp_snapshots row
+    const devRes = await client.query(
+      'SELECT id, name, ip_address, mac_address FROM devices'
+    );
+    const devByIp = new Map();
+    const devByMac = new Map();
+    devRes.rows.forEach(row => {
+      if (row.ip_address) devByIp.set(row.ip_address, row);
+      if (row.mac_address) {
+        const norm = normalizeMac(row.mac_address);
+        if (norm) devByMac.set(norm, row);
+      }
+    });
+
+    // Compute intra-snapshot duplicate IPs and duplicate MACs
+    const ipCountMap = new Map();
+    const macToIpsMap = new Map();
+    for (const e of entries) {
+      if (e.ip_address) {
+        ipCountMap.set(e.ip_address, (ipCountMap.get(e.ip_address) || 0) + 1);
+      }
+      if (e.normalized_mac) {
+        if (!macToIpsMap.has(e.normalized_mac)) {
+          macToIpsMap.set(e.normalized_mac, new Set());
+        }
+        if (e.ip_address) {
+          macToIpsMap.get(e.normalized_mac).add(e.ip_address);
+        }
+      }
+    }
+
+    // Telemetry and integrity metadata
+    const rawList = options.rawPayload || parsed.rawEntries || null;
+    const telem = options.telemetry || {};
+    const totalRawEntries = telem.totalRawEntries || (rawList ? rawList.length : entries.length);
+    const validIpCount = telem.validIpCount !== undefined ? telem.validIpCount : entries.filter(e => e.is_valid_ip).length;
+    const validMacCount = telem.validMacCount !== undefined ? telem.validMacCount : entries.filter(e => e.has_mac).length;
+    const incompleteCount = telem.incompleteCount !== undefined ? telem.incompleteCount : entries.filter(e => !e.has_mac || (e.arp_state && e.arp_state.toLowerCase().includes('incomplete'))).length;
+    const invalidCount = telem.invalidCount !== undefined ? telem.invalidCount : entries.filter(e => !e.is_valid_ip).length;
+    const duplicateCount = telem.duplicateCount !== undefined ? telem.duplicateCount : Math.max(0, totalRawEntries - entries.length);
+    const extractionDurationMs = telem.durationMs || 0;
+    const totalPagesDetected = telem.totalPagesDetected || 1;
+    const pagesVisited = telem.pagesVisited || 1;
+    const paginationCompleted = telem.paginationCompleted !== undefined ? telem.paginationCompleted : true;
+    const pageRowsJson = JSON.stringify(telem.pageRows || []);
+    const integrityWarningsJson = JSON.stringify(telem.warnings || []);
+    const rawPayloadJson = rawList ? JSON.stringify(rawList.slice(0, 5000)) : null;
+    const extractionStatus = options.extractionStatus || (telem.status || (telem.warnings && telem.warnings.length > 0 ? 'complete_with_warnings' : 'complete'));
+
+    // 2. Insert arp_snapshots row with complete extraction and audit telemetry
     const snapInsert = await client.query(
       `INSERT INTO arp_snapshots
-        (snapshot_name, source_device, total_entries, notes)
-       VALUES ($1, $2, $3, $4)
+        (snapshot_name, source_device, total_entries, notes,
+         extraction_status, total_pages_detected, pages_visited, pagination_completed,
+         page_rows_json, total_raw_entries, valid_ip_count, valid_mac_count,
+         incomplete_count, invalid_count, duplicate_count, extraction_duration_ms,
+         integrity_warnings, raw_payload_json)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING id, imported_at`,
-      [snapshotName, sourceDevice, entries.length, notes]
+      [
+        snapshotName,
+        sourceDevice,
+        entries.length,
+        notes,
+        extractionStatus,
+        totalPagesDetected,
+        pagesVisited,
+        paginationCompleted,
+        pageRowsJson,
+        totalRawEntries,
+        validIpCount,
+        validMacCount,
+        incompleteCount,
+        invalidCount,
+        duplicateCount,
+        extractionDurationMs,
+        integrityWarningsJson,
+        rawPayloadJson
+      ]
     );
     const snapshotId = snapInsert.rows[0].id;
     const importedAt = snapInsert.rows[0].imported_at;
@@ -301,22 +393,98 @@ async function importArpSnapshot(input, options = {}) {
     let invalidEntriesCount = 0;
     const matchedInventoryIds = new Set();
 
-    // Prepare discovery records with match evaluation
+    // Prepare discovery records with match evaluation & individual entry verification
     const discoveryRows = entries.map(e => {
       let matchStatus = 'unmatched';
       let matchedInvId = null;
 
-      if (!e.is_valid_ip) {
+      const isValidIpv4 = Boolean(e.is_valid_ip && e.ip_address);
+      const isValidMac = Boolean(e.has_mac && e.normalized_mac && e.normalized_mac.length === 12);
+      const isIncomplete = Boolean(!e.has_mac || (e.arp_state && e.arp_state.toLowerCase().includes('incomplete')));
+      const isDuplicateIp = isValidIpv4 && ((ipCountMap.get(e.ip_address) || 0) > 1);
+      const mappedIps = isValidMac ? (macToIpsMap.get(e.normalized_mac) || new Set()) : new Set();
+      const isDuplicateMac = isValidMac && (mappedIps.size > 1);
+
+      const invItem = isValidMac ? invMap.get(e.normalized_mac) : null;
+      const regDev = (isValidIpv4 && devByIp.get(e.ip_address)) || (isValidMac && devByMac.get(e.normalized_mac)) || null;
+
+      let ipMismatch = false;
+      if (invItem && invItem.expected_ip && isValidIpv4 && invItem.expected_ip !== e.ip_address) {
+        ipMismatch = true;
+      }
+
+      const hasConflict = isDuplicateIp || isDuplicateMac || ipMismatch;
+
+      // Classify verification status
+      let verificationStatus = 'verified';
+      if (!isValidIpv4) {
+        verificationStatus = 'rejected';
+      } else if (hasConflict) {
+        verificationStatus = 'flagged';
+      } else if (isIncomplete) {
+        verificationStatus = 'verified_incomplete';
+      } else if (isValidMac) {
+        verificationStatus = 'verified';
+      } else {
+        verificationStatus = 'flagged';
+      }
+
+      // Compile human-readable verification reasons
+      const reasons = [];
+      if (isValidIpv4) {
+        reasons.push(`Valid IPv4 format (${e.ip_address})`);
+      } else {
+        reasons.push(`Invalid IPv4 address format: '${e.ip_address || 'empty'}'`);
+      }
+
+      if (isIncomplete) {
+        reasons.push('Incomplete ARP: Broadcast query sent, awaiting device response (normal for dormant/offline devices)');
+      } else if (isValidMac) {
+        reasons.push(`Valid IEEE 802 MAC format (${e.mac_address})`);
+      } else {
+        reasons.push(`Invalid or missing MAC format: '${e.mac_address || 'none'}'`);
+      }
+
+      if (invItem) {
+        reasons.push(`Matches official inventory: ${invItem.device_name} (${invItem.department_location || 'General'})`);
+        if (ipMismatch) {
+          reasons.push(`Inventory IP conflict: Discovered ${e.ip_address} differs from expected IP ${invItem.expected_ip}`);
+        }
+      } else if (isValidMac) {
+        reasons.push('Unmatched: MAC not found in official inventory (not registered)');
+      }
+
+      if (regDev) {
+        reasons.push(`Matches registered node: ${regDev.name} [ID #${regDev.id}]`);
+      }
+
+      if (isDuplicateIp) {
+        reasons.push(`Duplicate IP warning: Address ${e.ip_address} observed ${ipCountMap.get(e.ip_address)} times in extraction`);
+      }
+
+      if (isDuplicateMac) {
+        reasons.push(`Duplicate MAC warning: Hardware address ${e.mac_address} mapped to multiple IPs (${Array.from(mappedIps).join(', ')})`);
+      }
+
+      if (e.interface && e.interface !== 'Unknown') {
+        reasons.push(`Observed on firewall interface ${e.interface}`);
+      }
+
+      // Legacy match_status support for existing UI & analytics
+      if (!isValidIpv4) {
         matchStatus = 'invalid_ip';
         invalidEntriesCount++;
-      } else if (!e.has_mac) {
+      } else if (!isValidMac && isIncomplete) {
+        matchStatus = 'no_mac';
+        invalidEntriesCount++;
+      } else if (!isValidMac) {
         matchStatus = 'no_mac';
         invalidEntriesCount++;
       } else {
         entriesWithMac++;
-        if (invMap.has(e.normalized_mac)) {
+        if (invItem) {
           matchStatus = 'matched';
-          matchedInvId = invMap.get(e.normalized_mac).id;
+          matchedInvId = invItem.id;
           matchedInventoryIds.add(matchedInvId);
         } else {
           unmatchedCount++;
@@ -333,7 +501,15 @@ async function importArpSnapshot(input, options = {}) {
         is_router_entry: e.is_router_entry,
         has_mac: e.has_mac,
         matched_inventory_id: matchedInvId,
-        match_status: matchStatus
+        match_status: matchStatus,
+        is_valid_ipv4: isValidIpv4,
+        is_valid_mac: isValidMac,
+        is_incomplete: isIncomplete,
+        is_duplicate_ip: isDuplicateIp,
+        is_duplicate_mac: isDuplicateMac,
+        has_conflict: hasConflict,
+        verification_status: verificationStatus,
+        verification_reasons: JSON.stringify(reasons)
       };
     });
 
@@ -347,7 +523,7 @@ async function importArpSnapshot(input, options = {}) {
 
       for (const row of chunk) {
         valuePlaceholders.push(
-          `($${paramIdx}, $${paramIdx+1}, $${paramIdx+2}, $${paramIdx+3}, $${paramIdx+4}, $${paramIdx+5}, $${paramIdx+6}, $${paramIdx+7}, $${paramIdx+8}, $${paramIdx+9})`
+          `($${paramIdx}, $${paramIdx+1}, $${paramIdx+2}, $${paramIdx+3}, $${paramIdx+4}, $${paramIdx+5}, $${paramIdx+6}, $${paramIdx+7}, $${paramIdx+8}, $${paramIdx+9}, $${paramIdx+10}, $${paramIdx+11}, $${paramIdx+12}, $${paramIdx+13}, $${paramIdx+14}, $${paramIdx+15}, $${paramIdx+16}, $${paramIdx+17})`
         );
         params.push(
           row.snapshot_id,
@@ -359,16 +535,27 @@ async function importArpSnapshot(input, options = {}) {
           row.is_router_entry,
           row.has_mac,
           row.matched_inventory_id,
-          row.match_status
+          row.match_status,
+          row.is_valid_ipv4,
+          row.is_valid_mac,
+          row.is_incomplete,
+          row.is_duplicate_ip,
+          row.is_duplicate_mac,
+          row.has_conflict,
+          row.verification_status,
+          row.verification_reasons
         );
-        paramIdx += 10;
+        paramIdx += 18;
       }
 
       const query = `
         INSERT INTO arp_discoveries
           (snapshot_id, ip_address, mac_address, normalized_mac,
            interface, arp_state, is_router_entry, has_mac,
-           matched_inventory_id, match_status)
+           matched_inventory_id, match_status,
+           is_valid_ipv4, is_valid_mac, is_incomplete,
+           is_duplicate_ip, is_duplicate_mac, has_conflict,
+           verification_status, verification_reasons)
         VALUES ${valuePlaceholders.join(', ')}
       `;
       await client.query(query, params);
@@ -471,24 +658,65 @@ async function getSnapshotDetails(snapshotId, filter = {}) {
   const snapshot = snapRes.rows[0];
 
   let query = `
-    SELECT d.*, m.device_name, m.site_station, m.department_location, m.device_type
+    SELECT d.*,
+           m.device_name AS inventory_device_name,
+           m.site_station AS inventory_site,
+           m.department_location AS inventory_department,
+           m.device_type AS inventory_device_type,
+           m.expected_ip AS inventory_expected_ip,
+           dev.id AS registered_device_id,
+           dev.name AS registered_device_name,
+           dev.ip_address AS registered_ip,
+           dev.mac_address AS registered_mac,
+           dev.building AS registered_building,
+           dev.room AS registered_room,
+           dev.port_number AS registered_port,
+           p.status AS ping_status,
+           p.latency_ms AS ping_latency,
+           p.checked_at AS ping_checked_at
     FROM arp_discoveries d
     LEFT JOIN mac_inventory m ON d.matched_inventory_id = m.id
+    LEFT JOIN devices dev ON (
+      (dev.ip_address IS NOT NULL AND dev.ip_address = d.ip_address)
+      OR (d.normalized_mac IS NOT NULL AND dev.mac_address IS NOT NULL AND UPPER(REPLACE(REPLACE(dev.mac_address, ':', ''), '-', '')) = d.normalized_mac)
+    )
+    LEFT JOIN LATERAL (
+      SELECT status, latency_ms, checked_at
+      FROM status_history
+      WHERE device_id = dev.id
+      ORDER BY checked_at DESC
+      LIMIT 1
+    ) p ON true
     WHERE d.snapshot_id = $1
   `;
   const params = [snapshotId];
 
-  if (filter.matchStatus) {
+  if (filter.verificationStatus && filter.verificationStatus !== 'ALL') {
+    params.push(filter.verificationStatus);
+    query += ` AND d.verification_status = $${params.length}`;
+  }
+
+  if (filter.hasConflict !== undefined && filter.hasConflict !== null && filter.hasConflict !== 'ALL') {
+    params.push(filter.hasConflict === 'true' || filter.hasConflict === true);
+    query += ` AND d.has_conflict = $${params.length}`;
+  }
+
+  if (filter.matchStatus && filter.matchStatus !== 'ALL') {
     params.push(filter.matchStatus);
     query += ` AND d.match_status = $${params.length}`;
   }
 
-  if (filter.interface) {
+  if (filter.interface && filter.interface !== 'ALL') {
     params.push(filter.interface);
     query += ` AND d.interface = $${params.length}`;
   }
 
-  query += ` ORDER BY d.ip_address ASC`;
+  if (filter.arpState && filter.arpState !== 'ALL') {
+    params.push(filter.arpState);
+    query += ` AND d.arp_state ILIKE $${params.length}`;
+  }
+
+  query += ` ORDER BY d.ip_address ASC, d.id ASC`;
 
   const discoveriesRes = await pool.query(query, params);
 

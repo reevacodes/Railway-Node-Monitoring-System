@@ -31,7 +31,14 @@ import {
   Calendar,
   ArrowRight,
   Eye,
-  GitCompare
+  GitCompare,
+  Download,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  HelpCircle,
+  ShieldCheck,
+  Sliders
 } from 'lucide-react';
 
 // OUI Vendor Intelligence lookup for discovered MACs
@@ -152,6 +159,48 @@ export const ArpDiscovery = () => {
   const [rawText, setRawText] = useState('');
   const [snapshotFileName, setSnapshotFileName] = useState('Sophos XGS2100 Export');
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
+
+  // ==========================================
+  // State: ARP Verification & Audit Center (Phase 6)
+  // ==========================================
+  const [auditSnapshotId, setAuditSnapshotId] = useState('');
+  const [auditReport, setAuditReport] = useState(null);
+  const [auditDiscoveries, setAuditDiscoveries] = useState([]);
+  const [auditSummary, setAuditSummary] = useState({
+    total_entries: 0,
+    verified: 0,
+    verified_incomplete: 0,
+    flagged: 0,
+    rejected: 0,
+    matched: 0,
+    unmatched: 0,
+    no_mac_failed: 0,
+  });
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+
+  // Verification Center Multi-Dimensional Filters
+  const [verifStatusFilter, setVerifStatusFilter] = useState('ALL'); // 'ALL' | 'verified' | 'verified_incomplete' | 'flagged' | 'rejected'
+  const [verifConflictFilter, setVerifConflictFilter] = useState('ALL'); // 'ALL' | 'true' | 'false'
+  const [verifIfaceFilter, setVerifIfaceFilter] = useState('ALL');
+  const [verifArpStateFilter, setVerifArpStateFilter] = useState('ALL');
+  const [verifMatchFilter, setVerifMatchFilter] = useState('ALL');
+  const [verifRegFilter, setVerifRegFilter] = useState('ALL');
+  const [verifPingFilter, setVerifPingFilter] = useState('ALL');
+  const [verifSearch, setVerifSearch] = useState('');
+  const [auditPage, setAuditPage] = useState(1);
+  const auditPageSize = 25;
+
+  // Individual Entry Verification Deep-Inspection Dossier
+  const [inspectingEntry, setInspectingEntry] = useState(null);
+
+  // Snapshot Comparison inside Verification Center
+  const [isVerifCompareExpanded, setIsVerifCompareExpanded] = useState(false);
+  const [verifBaseId, setVerifBaseId] = useState('');
+  const [verifTargetId, setVerifTargetId] = useState('');
+  const [verifCompareDiff, setVerifCompareDiff] = useState(null);
+  const [isVerifComparing, setIsVerifComparing] = useState(false);
+  const [verifCompareTab, setVerifCompareTab] = useState('ALL');
 
   // ----------------------------------------------------
   // Debounce search input by 300 ms and reset page to 1
@@ -393,20 +442,77 @@ export const ArpDiscovery = () => {
     setRawArpStateFilter('ALL');
   };
 
+  // ----------------------------------------------------
+  // Verification & Audit Center Fetch Handlers
+  // ----------------------------------------------------
+  const fetchAuditData = useCallback(async (targetSnapId = null) => {
+    setIsAuditLoading(true);
+    setAuditError(null);
+    try {
+      const snapIdToFetch = targetSnapId || auditSnapshotId || selectedSnapshotId || 'latest';
+      const report = await api.getSnapshotAudit(snapIdToFetch);
+      setAuditReport(report);
+      if (report && report.snapshotId) {
+        setAuditSnapshotId(String(report.snapshotId));
+      }
+
+      const discoveriesRes = await api.getArpDiscoveries({
+        snapshot_id: report.snapshotId,
+        verification_status: verifStatusFilter !== 'ALL' ? verifStatusFilter : undefined,
+        has_conflict: verifConflictFilter !== 'ALL' ? verifConflictFilter : undefined,
+        interface: verifIfaceFilter !== 'ALL' ? verifIfaceFilter : undefined,
+        arp_state: verifArpStateFilter !== 'ALL' ? verifArpStateFilter : undefined,
+        match_status: verifMatchFilter !== 'ALL' ? verifMatchFilter : undefined,
+        registered_match: verifRegFilter !== 'ALL' ? verifRegFilter : undefined,
+        ping_status: verifPingFilter !== 'ALL' ? verifPingFilter : undefined,
+        search: verifSearch ? verifSearch.trim() : undefined,
+      });
+
+      setAuditDiscoveries(discoveriesRes.items || []);
+      if (discoveriesRes.summary) {
+        setAuditSummary(discoveriesRes.summary);
+      }
+    } catch (err) {
+      console.error('Fetch audit failed:', err);
+      setAuditError(err.message || 'Failed to fetch verification audit data');
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, [auditSnapshotId, selectedSnapshotId, verifStatusFilter, verifConflictFilter, verifIfaceFilter, verifArpStateFilter, verifMatchFilter, verifRegFilter, verifPingFilter, verifSearch]);
+
+  const handleRunVerifDiff = async () => {
+    if (!verifBaseId || !verifTargetId || verifBaseId === verifTargetId) {
+      showNotification('Please select two distinct snapshots to compare', 'warning');
+      return;
+    }
+    setIsVerifComparing(true);
+    try {
+      const diff = await api.compareArpSnapshots(verifBaseId, verifTargetId);
+      setVerifCompareDiff(diff);
+      showNotification('Delta comparison computed successfully.', 'success');
+    } catch (err) {
+      showNotification(err.message || 'Failed to calculate snapshot comparison', 'error');
+    } finally {
+      setIsVerifComparing(false);
+    }
+  };
+
   // Initial load
   useEffect(() => {
     fetchDiscoveredDevices();
     fetchSnapshotsList();
   }, []);
 
-  // Update on filter / pagination changes
+  // Update on filter / view changes
   useEffect(() => {
     if (activeView === 'MONITORED_DEVICES') {
       fetchDiscoveredDevices();
-    } else {
+    } else if (activeView === 'RAW_SNAPSHOT') {
       fetchRawSnapshotEntries();
+    } else if (activeView === 'VERIFICATION_CENTER') {
+      fetchAuditData();
     }
-  }, [activeView, fetchDiscoveredDevices, fetchRawSnapshotEntries]);
+  }, [activeView, fetchDiscoveredDevices, fetchRawSnapshotEntries, fetchAuditData]);
 
   // ----------------------------------------------------
   // Edit Modal Handlers (Direct Database Editing)
@@ -626,6 +732,38 @@ export const ArpDiscovery = () => {
             }}
           >
             {activeSnapshot?.total_entries ?? '…'}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveView('VERIFICATION_CENTER')}
+          style={{
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 600,
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            borderBottom: activeView === 'VERIFICATION_CENTER' ? '3px solid #0284c7' : '3px solid transparent',
+            color: activeView === 'VERIFICATION_CENTER' ? '#0284c7' : '#64748b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <ShieldCheck size={16} />
+          <span>Verification & Audit Center</span>
+          <span
+            style={{
+              backgroundColor: activeView === 'VERIFICATION_CENTER' ? '#ecfdf5' : '#f1f5f9',
+              color: activeView === 'VERIFICATION_CENTER' ? '#059669' : '#64748b',
+              fontSize: '11px',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontWeight: 700,
+            }}
+          >
+            {auditSummary.verified ? `${auditSummary.verified} Verified` : 'Audit Ledger'}
           </span>
         </button>
       </div>
@@ -1831,6 +1969,1112 @@ export const ArpDiscovery = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* ========================================================== */}
+      {/* VIEW 3: ADMINISTRATOR ARP VERIFICATION & AUDIT CENTER (Phase 6) */}
+      {/* ========================================================== */}
+      {activeView === 'VERIFICATION_CENTER' && (
+        <div>
+          {/* 1. Extraction Integrity & Telemetry Summary Card */}
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              padding: '16px 20px',
+              marginBottom: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            }}
+          >
+            {/* Header Strip with Snapshot Selector & Actions */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                borderBottom: '1px solid #f1f5f9',
+                paddingBottom: '12px',
+                marginBottom: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '6px',
+                    backgroundColor: '#ecfdf5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                      ARP Extraction Integrity & Verification Center
+                    </h2>
+                    {auditReport?.extractionStatus === 'complete' ? (
+                      <span className="status-badge online" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                        <CheckCircle2 size={12} /> COMPLETE EXTRACTION
+                      </span>
+                    ) : auditReport?.extractionStatus === 'complete_with_warnings' ? (
+                      <span className="status-badge warning" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                        <AlertTriangle size={12} /> COMPLETE (WITH WARNINGS)
+                      </span>
+                    ) : auditReport?.extractionStatus === 'incomplete' ? (
+                      <span className="status-badge offline" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                        <AlertCircle size={12} /> INCOMPLETE EXTRACTION
+                      </span>
+                    ) : (
+                      <span className="status-badge offline" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                        <AlertCircle size={12} /> {auditReport?.extractionStatus?.toUpperCase() || 'UNKNOWN'}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '2px' }}>
+                    Auditing Snapshot <strong>#{auditReport?.snapshotId || activeSnapshot?.id || '—'}</strong>: {auditReport?.snapshotName || activeSnapshot?.snapshot_name || 'Latest'}
+                    {' • '}Source: <strong>{auditReport?.sourceDevice || 'Sophos XGS2100'}</strong>
+                    {' • '}Collected: <span className="mono">{formatIndianDateTime(auditReport?.importedAt || activeSnapshot?.imported_at)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Snapshot Dropdown & Quick Actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <select
+                  className="filter-select"
+                  style={{ height: '32px', fontSize: '11.5px', maxWidth: '240px' }}
+                  value={auditSnapshotId || String(activeSnapshot?.id || '')}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setAuditSnapshotId(id);
+                    setSelectedSnapshotId(id);
+                    fetchAuditData(id);
+                  }}
+                >
+                  {snapshots.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      #{s.id} — {s.snapshot_name} ({formatIndianDate(s.imported_at)})
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  onClick={() => fetchAuditData()}
+                  disabled={isAuditLoading}
+                  title="Reload audit integrity metrics"
+                >
+                  <RefreshCw size={12} className={isAuditLoading ? 'spin' : ''} />
+                  <span>Refresh</span>
+                </button>
+
+                {/* Export Dropdown / Buttons */}
+                <a
+                  href={api.getRawExportUrl(auditSnapshotId || 'latest', 'csv')}
+                  download
+                  className="btn btn-secondary btn-sm"
+                  style={{ height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
+                  title="Download untouched raw firewall extraction CSV"
+                >
+                  <Download size={12} />
+                  <span>Raw CSV</span>
+                </a>
+
+                <a
+                  href={api.getVerifiedExportUrl(auditSnapshotId || 'latest', 'csv')}
+                  download
+                  className="btn btn-primary btn-sm"
+                  style={{ height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
+                  title="Download fully verified audit ledger with explanation reasons CSV"
+                >
+                  <Download size={12} />
+                  <span>Verified Audit CSV</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Integrity Warnings Banner (if any) */}
+            {auditReport?.telemetry?.integrityWarnings && auditReport.telemetry.integrityWarnings.length > 0 && (
+              <div
+                style={{
+                  backgroundColor: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: '4px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                }}
+              >
+                <AlertTriangle size={16} style={{ color: '#d97706', marginTop: '2px', flexShrink: 0 }} />
+                <div style={{ fontSize: '12px', color: '#92400e' }}>
+                  <strong>Extraction Integrity Notices:</strong>
+                  <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
+                    {auditReport.telemetry.integrityWarnings.map((w, idx) => (
+                      <li key={idx}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* 6 Core Verification Telemetry Metric Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+              {/* Card 1: Total Raw Extracted */}
+              <div style={{ padding: '10px 12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Total Raw Extracted</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', margin: '2px 0' }}>
+                  {auditReport?.telemetry?.totalRawEntries ?? activeSnapshot?.total_entries ?? '—'}
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>Untouched firewall records</div>
+              </div>
+
+              {/* Card 2: Verified Valid Entries */}
+              <div style={{ padding: '10px 12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>Verified Valid Entries</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d', margin: '2px 0' }}>
+                  {auditReport?.audit?.verified ?? activeSnapshot?.entries_with_mac ?? '—'}
+                </div>
+                <div style={{ fontSize: '10px', color: '#166534' }}>Valid IPv4 + Valid IEEE MAC</div>
+              </div>
+
+              {/* Card 3: Incomplete ARP Entries */}
+              <div style={{ padding: '10px 12px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#b45309', fontWeight: 600 }}>Incomplete ARP Entries</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: '#b45309', margin: '2px 0' }}>
+                  {auditReport?.audit?.verifiedIncomplete ?? auditReport?.telemetry?.incompleteCount ?? '—'}
+                </div>
+                <div style={{ fontSize: '10px', color: '#92400e' }} title="Broadcast sent, waiting for device response (normal for powered off devices)">
+                  Pending host reply (normal)
+                </div>
+              </div>
+
+              {/* Card 4: Flagged Anomalies / Conflicts */}
+              <div style={{ padding: '10px 12px', backgroundColor: auditReport?.audit?.hasConflictTotal > 0 ? '#fef2f2' : '#f8fafc', border: `1px solid ${auditReport?.audit?.hasConflictTotal > 0 ? '#fecaca' : '#e2e8f0'}`, borderRadius: '4px' }}>
+                <div style={{ fontSize: '11px', color: auditReport?.audit?.hasConflictTotal > 0 ? '#b91c1c' : '#64748b', fontWeight: 600 }}>
+                  Flagged Anomalies
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: auditReport?.audit?.hasConflictTotal > 0 ? '#dc2626' : '#0f172a', margin: '2px 0' }}>
+                  {auditReport?.audit?.hasConflictTotal ?? 0}
+                </div>
+                <div style={{ fontSize: '10px', color: auditReport?.audit?.hasConflictTotal > 0 ? '#991b1b' : '#64748b' }}>
+                  Duplicate IPs, MACs or mismatches
+                </div>
+              </div>
+
+              {/* Card 5: Pagination Tracking */}
+              <div style={{ padding: '10px 12px', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#0369a1', fontWeight: 600 }}>Pagination Completeness</div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#0284c7', margin: '4px 0 2px' }}>
+                  {auditReport?.telemetry?.pagesVisited ?? 1} of {auditReport?.telemetry?.totalPagesDetected ?? 1} Pages
+                </div>
+                <div style={{ fontSize: '10px', color: '#0369a1' }}>
+                  {auditReport?.telemetry?.paginationCompleted ? '✓ 100% Fully Visited' : '⚠ Pagination Incomplete'}
+                </div>
+              </div>
+
+              {/* Card 6: Extraction Diagnostics */}
+              <div style={{ padding: '10px 12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Diagnostics & Duration</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: '3px 0 2px' }}>
+                  {auditReport?.telemetry?.extractionDurationMs ? `${auditReport.telemetry.extractionDurationMs} ms` : '—'}
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>
+                  Duplicates: {auditReport?.telemetry?.duplicateCount ?? 0} | Rejected: {auditReport?.audit?.rejected ?? 0}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Interactive Snapshot Comparison Accordion (Phase 5) */}
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              padding: '14px 18px',
+              marginBottom: '16px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+              }}
+              onClick={() => setIsVerifCompareExpanded(!isVerifCompareExpanded)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <GitCompare size={16} style={{ color: '#0284c7' }} />
+                <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0f172a' }}>
+                  Consecutive Snapshot Comparison & Delta Audit
+                </span>
+                <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0284c7', fontSize: '10px' }}>
+                  Phase 5 Diff Engine
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '11px', height: '26px' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsVerifCompareExpanded(!isVerifCompareExpanded);
+                }}
+              >
+                {isVerifCompareExpanded ? 'Collapse Inspector' : 'Expand Delta Inspector'}
+              </button>
+            </div>
+
+            {isVerifCompareExpanded && (
+              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '10px', alignItems: 'flex-end', marginBottom: '14px' }}>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '11px', fontWeight: 600 }}>
+                      Baseline Snapshot (Earlier)
+                    </label>
+                    <select
+                      className="filter-select"
+                      style={{ width: '100%', height: '30px', fontSize: '11px' }}
+                      value={verifBaseId || (snapshots[1]?.id ? String(snapshots[1].id) : '')}
+                      onChange={(e) => setVerifBaseId(e.target.value)}
+                    >
+                      {snapshots.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          #{s.id} — {s.snapshot_name} ({formatIndianDate(s.imported_at)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontSize: '11px', fontWeight: 600 }}>
+                      Target Snapshot (Current / Later)
+                    </label>
+                    <select
+                      className="filter-select"
+                      style={{ width: '100%', height: '30px', fontSize: '11px' }}
+                      value={verifTargetId || (snapshots[0]?.id ? String(snapshots[0].id) : '')}
+                      onChange={(e) => setVerifTargetId(e.target.value)}
+                    >
+                      {snapshots.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          #{s.id} — {s.snapshot_name} ({formatIndianDate(s.imported_at)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      style={{ height: '30px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={handleRunVerifDiff}
+                      disabled={isVerifComparing}
+                    >
+                      <Activity size={12} className={isVerifComparing ? 'spin' : ''} />
+                      <span>{isVerifComparing ? 'Comparing...' : 'Compute Deltas'}</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    <a
+                      href={api.getCompareExportUrl(
+                        verifBaseId || (snapshots[1]?.id ? String(snapshots[1].id) : '1'),
+                        verifTargetId || (snapshots[0]?.id ? String(snapshots[0].id) : '2'),
+                        'csv'
+                      )}
+                      download
+                      className="btn btn-secondary btn-sm"
+                      style={{ height: '30px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
+                      title="Export snapshot delta comparison as CSV"
+                    >
+                      <Download size={12} />
+                      <span>Export Diff</span>
+                    </a>
+                  </div>
+                </div>
+
+                {verifCompareDiff && (
+                  <div>
+                    {/* 6 Category Filter Tabs */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                      <button
+                        className={`btn btn-sm ${verifCompareTab === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        onClick={() => setVerifCompareTab('ALL')}
+                      >
+                        All Changes
+                      </button>
+                      <button
+                        className={`btn btn-sm ${verifCompareTab === 'NEW' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        onClick={() => setVerifCompareTab('NEW')}
+                      >
+                        New Discovered MACs ({verifCompareDiff.newMacs?.length || 0})
+                      </button>
+                      <button
+                        className={`btn btn-sm ${verifCompareTab === 'IP_TO_MAC' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        onClick={() => setVerifCompareTab('IP_TO_MAC')}
+                      >
+                        Changed IP-to-MAC ({verifCompareDiff.changedIpToMac?.length || 0})
+                      </button>
+                      <button
+                        className={`btn btn-sm ${verifCompareTab === 'MAC_TO_IP' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        onClick={() => setVerifCompareTab('MAC_TO_IP')}
+                      >
+                        Changed MAC-to-IP ({verifCompareDiff.changedMacToIp?.length || 0})
+                      </button>
+                      <button
+                        className={`btn btn-sm ${verifCompareTab === 'IFACE' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        onClick={() => setVerifCompareTab('IFACE')}
+                      >
+                        Interface Shifts ({verifCompareDiff.interfaceChanges?.length || 0})
+                      </button>
+                      <button
+                        className={`btn btn-sm ${verifCompareTab === 'ARP_STATE' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        onClick={() => setVerifCompareTab('ARP_STATE')}
+                      >
+                        ARP State Changes ({verifCompareDiff.arpStateChanges?.length || 0})
+                      </button>
+                      <button
+                        className={`btn btn-sm ${verifCompareTab === 'UNOBSERVED' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        onClick={() => setVerifCompareTab('UNOBSERVED')}
+                      >
+                        Unobserved ({verifCompareDiff.unobserved?.length || 0})
+                      </button>
+                    </div>
+
+                    {/* Diff Table */}
+                    <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
+                      <table className="table" style={{ fontSize: '11px', margin: 0 }}>
+                        <thead>
+                          <tr>
+                            <th>Delta Category</th>
+                            <th>IP Address</th>
+                            <th>MAC Address</th>
+                            <th>Firewall Port</th>
+                            <th>Baseline Value (Before)</th>
+                            <th>Target Value (After)</th>
+                            <th>Observed / Note</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* 1. New MACs */}
+                          {(verifCompareTab === 'ALL' || verifCompareTab === 'NEW') &&
+                            (verifCompareDiff.newMacs || []).map((row, i) => (
+                              <tr key={`new-${i}`}>
+                                <td>
+                                  <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#15803d', fontSize: '10px' }}>
+                                    NEW DISCOVERY
+                                  </span>
+                                </td>
+                                <td className="mono" style={{ color: '#0284c7', fontWeight: 600 }}>{row.ip_address}</td>
+                                <td className="mono">{row.mac_address}</td>
+                                <td className="mono">{row.interface}</td>
+                                <td style={{ color: '#94a3b8' }}>—</td>
+                                <td style={{ color: '#15803d', fontWeight: 600 }}>Observed in target</td>
+                                <td style={{ fontSize: '10px', color: '#64748b' }}>{formatIndianDateTime(row.discovered_at)}</td>
+                              </tr>
+                            ))}
+
+                          {/* 2. Changed IP to MAC */}
+                          {(verifCompareTab === 'ALL' || verifCompareTab === 'IP_TO_MAC') &&
+                            (verifCompareDiff.changedIpToMac || []).map((row, i) => (
+                              <tr key={`ip2mac-${i}`}>
+                                <td>
+                                  <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#b45309', fontSize: '10px' }}>
+                                    IP ➔ MAC SWAP
+                                  </span>
+                                </td>
+                                <td className="mono" style={{ color: '#0284c7', fontWeight: 600 }}>{row.ip_address}</td>
+                                <td className="mono">{row.current_mac}</td>
+                                <td className="mono">{row.current_interface}</td>
+                                <td className="mono" style={{ color: '#dc2626' }}>{row.previous_mac}</td>
+                                <td className="mono" style={{ color: '#15803d', fontWeight: 600 }}>{row.current_mac}</td>
+                                <td style={{ fontSize: '10px', color: '#64748b' }}>Hardware NIC replacement or roaming</td>
+                              </tr>
+                            ))}
+
+                          {/* 3. Changed MAC to IP */}
+                          {(verifCompareTab === 'ALL' || verifCompareTab === 'MAC_TO_IP') &&
+                            (verifCompareDiff.changedMacToIp || []).map((row, i) => (
+                              <tr key={`mac2ip-${i}`}>
+                                <td>
+                                  <span className="badge" style={{ backgroundColor: '#e0e7ff', color: '#4338ca', fontSize: '10px' }}>
+                                    MAC ➔ IP REASSIGN
+                                  </span>
+                                </td>
+                                <td className="mono" style={{ color: '#0284c7', fontWeight: 600 }}>{row.current_ip}</td>
+                                <td className="mono">{row.mac_address}</td>
+                                <td className="mono">{row.current_interface}</td>
+                                <td className="mono" style={{ color: '#dc2626' }}>{row.previous_ip}</td>
+                                <td className="mono" style={{ color: '#15803d', fontWeight: 600 }}>{row.current_ip}</td>
+                                <td style={{ fontSize: '10px', color: '#64748b' }}>DHCP lease renewed with new IP</td>
+                              </tr>
+                            ))}
+
+                          {/* 4. Interface changes */}
+                          {(verifCompareTab === 'ALL' || verifCompareTab === 'IFACE') &&
+                            (verifCompareDiff.interfaceChanges || []).map((row, i) => (
+                              <tr key={`iface-${i}`}>
+                                <td>
+                                  <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '10px' }}>
+                                    PORT SHIFT
+                                  </span>
+                                </td>
+                                <td className="mono" style={{ color: '#0284c7', fontWeight: 600 }}>{row.ip_address}</td>
+                                <td className="mono">{row.mac_address}</td>
+                                <td className="mono">{row.current_interface}</td>
+                                <td className="mono" style={{ color: '#dc2626' }}>{row.previous_interface}</td>
+                                <td className="mono" style={{ color: '#15803d', fontWeight: 600 }}>{row.current_interface}</td>
+                                <td style={{ fontSize: '10px', color: '#64748b' }}>Device connected to different port/VLAN</td>
+                              </tr>
+                            ))}
+
+                          {/* 5. ARP State changes */}
+                          {(verifCompareTab === 'ALL' || verifCompareTab === 'ARP_STATE') &&
+                            (verifCompareDiff.arpStateChanges || []).map((row, i) => (
+                              <tr key={`state-${i}`}>
+                                <td>
+                                  <span className="badge" style={{ backgroundColor: '#ede9fe', color: '#6d28d9', fontSize: '10px' }}>
+                                    STATE CHANGE
+                                  </span>
+                                </td>
+                                <td className="mono" style={{ color: '#0284c7', fontWeight: 600 }}>{row.ip_address}</td>
+                                <td className="mono">{row.mac_address || '—'}</td>
+                                <td className="mono">{row.interface}</td>
+                                <td><ArpStateBadge state={row.previous_state} /></td>
+                                <td><ArpStateBadge state={row.current_state} /></td>
+                                <td style={{ fontSize: '10px', color: '#64748b' }}>Firewall neighbor cache state transition</td>
+                              </tr>
+                            ))}
+
+                          {/* 6. Unobserved */}
+                          {(verifCompareTab === 'ALL' || verifCompareTab === 'UNOBSERVED') &&
+                            (verifCompareDiff.unobserved || []).map((row, i) => (
+                              <tr key={`unobs-${i}`}>
+                                <td>
+                                  <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#b91c1c', fontSize: '10px' }}>
+                                    UNOBSERVED
+                                  </span>
+                                </td>
+                                <td className="mono">{row.ip_address}</td>
+                                <td className="mono">{row.mac_address}</td>
+                                <td className="mono">{row.interface}</td>
+                                <td style={{ color: '#166534' }}>Present in Baseline</td>
+                                <td style={{ color: '#dc2626' }}>Absent in Target</td>
+                                <td style={{ fontSize: '10px', color: '#991b1b' }}>{row.note}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 3. Verification Filter Toolbar */}
+          <div className="panel" style={{ marginBottom: '16px' }}>
+            <div className="panel-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px' }}>
+              <div className="panel-title" style={{ fontSize: '13px' }}>
+                <Sliders size={14} style={{ color: '#0284c7' }} />
+                <span>Verification & Traceability Filters</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>
+                Showing <strong>{auditDiscoveries.length}</strong> matching entries in snapshot #{auditSnapshotId || 'latest'}
+              </div>
+            </div>
+
+            <div className="filter-toolbar" style={{ flexWrap: 'wrap', gap: '8px', padding: '10px 14px' }}>
+              {/* Search */}
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search size={13} style={{ position: 'absolute', left: '8px', top: '9px', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ paddingLeft: '28px', height: '30px', fontSize: '11.5px' }}
+                  placeholder="Search IP, MAC, device..."
+                  value={verifSearch}
+                  onChange={(e) => {
+                    setVerifSearch(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+                {verifSearch && (
+                  <button
+                    onClick={() => { setVerifSearch(''); setAuditPage(1); }}
+                    style={{ position: 'absolute', right: '8px', top: '7px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Verification Status */}
+              <select
+                className="filter-select"
+                style={{ height: '30px', fontSize: '11.5px' }}
+                value={verifStatusFilter}
+                onChange={(e) => { setVerifStatusFilter(e.target.value); setAuditPage(1); }}
+              >
+                <option value="ALL">All Verification Results</option>
+                <option value="verified">Verified (Valid IP & MAC)</option>
+                <option value="verified_incomplete">Verified Incomplete (Pending Reply)</option>
+                <option value="flagged">Flagged (Conflicts / Discrepancies)</option>
+                <option value="rejected">Rejected (Malformed)</option>
+              </select>
+
+              {/* Conflict Filter */}
+              <select
+                className="filter-select"
+                style={{ height: '30px', fontSize: '11.5px' }}
+                value={verifConflictFilter}
+                onChange={(e) => { setVerifConflictFilter(e.target.value); setAuditPage(1); }}
+              >
+                <option value="ALL">Conflict: All</option>
+                <option value="true">Conflicts Only (Duplicate IP / MAC)</option>
+                <option value="false">Clean Entries Only</option>
+              </select>
+
+              {/* Interface */}
+              <select
+                className="filter-select"
+                style={{ height: '30px', fontSize: '11.5px' }}
+                value={verifIfaceFilter}
+                onChange={(e) => { setVerifIfaceFilter(e.target.value); setAuditPage(1); }}
+              >
+                <option value="ALL">All Interfaces</option>
+                <option value="Port1">Port1 (Internal LAN)</option>
+                <option value="Port3">Port3 (WLAN / Relay)</option>
+                <option value="Port2">Port2 (WAN / Gateway)</option>
+                <option value="Port5">Port5 (DMZ)</option>
+              </select>
+
+              {/* ARP State */}
+              <select
+                className="filter-select"
+                style={{ height: '30px', fontSize: '11.5px' }}
+                value={verifArpStateFilter}
+                onChange={(e) => { setVerifArpStateFilter(e.target.value); setAuditPage(1); }}
+              >
+                <option value="ALL">All ARP States</option>
+                <option value="Complete">Complete</option>
+                <option value="Incomplete">Incomplete</option>
+                <option value="REACHABLE">REACHABLE</option>
+                <option value="STALE">STALE</option>
+                <option value="FAILED">FAILED</option>
+              </select>
+
+              {/* Inventory Match */}
+              <select
+                className="filter-select"
+                style={{ height: '30px', fontSize: '11.5px' }}
+                value={verifMatchFilter}
+                onChange={(e) => { setVerifMatchFilter(e.target.value); setAuditPage(1); }}
+              >
+                <option value="ALL">All Inventory Matches</option>
+                <option value="matched">Matched Official Inventory</option>
+                <option value="unmatched">Unmatched in Inventory</option>
+              </select>
+
+              {/* Registered Device Match */}
+              <select
+                className="filter-select"
+                style={{ height: '30px', fontSize: '11.5px' }}
+                value={verifRegFilter}
+                onChange={(e) => { setVerifRegFilter(e.target.value); setAuditPage(1); }}
+              >
+                <option value="ALL">All Node Registrations</option>
+                <option value="yes">Registered Monitored Node</option>
+                <option value="no">Unregistered Node</option>
+              </select>
+
+              {/* Decoupled Ping Status Filter */}
+              <select
+                className="filter-select"
+                style={{ height: '30px', fontSize: '11.5px' }}
+                value={verifPingFilter}
+                onChange={(e) => { setVerifPingFilter(e.target.value); setAuditPage(1); }}
+              >
+                <option value="ALL">All Ping Statuses</option>
+                <option value="ONLINE">Ping: ONLINE</option>
+                <option value="OFFLINE">Ping: OFFLINE</option>
+                <option value="UNKNOWN">Ping: UNKNOWN / NOT PROBED</option>
+              </select>
+
+              {(verifStatusFilter !== 'ALL' || verifConflictFilter !== 'ALL' || verifIfaceFilter !== 'ALL' || verifArpStateFilter !== 'ALL' || verifMatchFilter !== 'ALL' || verifRegFilter !== 'ALL' || verifPingFilter !== 'ALL' || verifSearch) && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ height: '30px', fontSize: '11px', color: '#dc2626', borderColor: '#fca5a5' }}
+                  onClick={() => {
+                    setVerifStatusFilter('ALL');
+                    setVerifConflictFilter('ALL');
+                    setVerifIfaceFilter('ALL');
+                    setVerifArpStateFilter('ALL');
+                    setVerifMatchFilter('ALL');
+                    setVerifRegFilter('ALL');
+                    setVerifPingFilter('ALL');
+                    setVerifSearch('');
+                    setAuditPage(1);
+                  }}
+                >
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            {/* 4. Audit Ledger Table */}
+            <div className="panel-body" style={{ padding: 0 }}>
+              {isAuditLoading ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+                  <RefreshCw size={24} className="spin" style={{ margin: '0 auto 8px' }} />
+                  <div>Loading verification audit ledger...</div>
+                </div>
+              ) : auditError ? (
+                <div style={{ padding: '30px', textAlign: 'center', color: '#b91c1c' }}>
+                  <AlertTriangle size={24} style={{ margin: '0 auto 6px', color: '#dc2626' }} />
+                  <div>{auditError}</div>
+                </div>
+              ) : auditDiscoveries.length === 0 ? (
+                <div style={{ padding: '30px', textAlign: 'center' }}>
+                  <EmptyState
+                    title="No Entries Match Verification Filters"
+                    description="Try adjusting your status, conflict, interface, or search filters above."
+                  />
+                </div>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="table" style={{ fontSize: '11.5px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '45px' }}>#</th>
+                        <th>IP Address</th>
+                        <th>MAC Address & Vendor</th>
+                        <th>Firewall Port</th>
+                        <th>Layer-2 ARP State</th>
+                        <th>Decoupled ICMP Ping</th>
+                        <th>Verification Status</th>
+                        <th>Inventory Correlation</th>
+                        <th>Registered Node</th>
+                        <th style={{ textAlign: 'center', width: '110px' }}>Audit Dossier</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditDiscoveries.slice((auditPage - 1) * auditPageSize, auditPage * auditPageSize).map((row, idx) => {
+                        const vendor = getVendorFromMac(row.mac_address);
+                        const rowNum = (auditPage - 1) * auditPageSize + idx + 1;
+                        return (
+                          <tr
+                            key={row.id || idx}
+                            style={{
+                              backgroundColor: row.has_conflict ? '#fff7ed' : row.verification_status === 'rejected' ? '#fef2f2' : undefined,
+                            }}
+                          >
+                            <td style={{ color: '#94a3b8', fontSize: '10.5px' }}>{rowNum}</td>
+
+                            {/* IP */}
+                            <td>
+                              <span className="mono" style={{ fontWeight: 700, color: '#0284c7' }}>
+                                {row.ip_address}
+                              </span>
+                              {row.is_duplicate_ip && (
+                                <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#b91c1c', fontSize: '9.5px', marginLeft: '6px' }}>
+                                  DUP IP
+                                </span>
+                              )}
+                            </td>
+
+                            {/* MAC & Vendor */}
+                            <td>
+                              {row.mac_address ? (
+                                <div>
+                                  <span className="mono" style={{ fontWeight: 600 }}>{row.mac_address}</span>
+                                  {vendor && <div style={{ fontSize: '10px', color: '#64748b' }}>{vendor}</div>}
+                                  {row.is_duplicate_mac && (
+                                    <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#b91c1c', fontSize: '9.5px' }}>
+                                      DUP MAC
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#b45309', fontStyle: 'italic', fontSize: '11px' }}>
+                                  Incomplete (No MAC)
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Interface */}
+                            <td>
+                              <span className="mono">{row.interface || 'Unknown'}</span>
+                            </td>
+
+                            {/* ARP Cache State */}
+                            <td>
+                              <ArpStateBadge state={row.arp_state} />
+                            </td>
+
+                            {/* Decoupled Ping Reachability (Phase 7) */}
+                            <td>
+                              {row.ping_status ? (
+                                <StatusBadge status={row.ping_status.toLowerCase()} latency={row.ping_latency} />
+                              ) : (
+                                <span className="status-badge" style={{ backgroundColor: '#f1f5f9', color: '#64748b', fontSize: '10px' }}>
+                                  NOT PROBED
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Verification Classification */}
+                            <td>
+                              {row.verification_status === 'verified' ? (
+                                <span className="status-badge online" style={{ fontSize: '10px' }}>
+                                  <CheckCircle2 size={10} /> Verified
+                                </span>
+                              ) : row.verification_status === 'verified_incomplete' ? (
+                                <span className="status-badge warning" style={{ fontSize: '10px' }}>
+                                  <Clock size={10} /> Incomplete
+                                </span>
+                              ) : row.verification_status === 'flagged' ? (
+                                <span className="status-badge offline" style={{ fontSize: '10px', backgroundColor: '#fee2e2', color: '#b91c1c' }}>
+                                  <AlertTriangle size={10} /> Flagged
+                                </span>
+                              ) : (
+                                <span className="status-badge offline" style={{ fontSize: '10px' }}>
+                                  <AlertCircle size={10} /> Rejected
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Inventory */}
+                            <td>
+                              {row.inventory_device_name ? (
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#0f172a' }}>{row.inventory_device_name}</span>
+                                  {row.inventory_location && (
+                                    <div style={{ fontSize: '10px', color: '#64748b' }}>{row.inventory_location}</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontSize: '11px' }}>Unmatched</span>
+                              )}
+                            </td>
+
+                            {/* Registered Device */}
+                            <td>
+                              {row.registered_device_name ? (
+                                <span style={{ fontWeight: 600, color: '#166534', fontSize: '11px' }}>
+                                  ✓ {row.registered_device_name}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontSize: '11px' }}>—</span>
+                              )}
+                            </td>
+
+                            {/* Action: Open Inspection Dossier */}
+                            <td style={{ textAlign: 'center' }}>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ height: '26px', fontSize: '11px', padding: '0 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => setInspectingEntry(row)}
+                                title="Inspect entry raw values, normalization, verification reasons & decoupled ping"
+                              >
+                                <Eye size={12} />
+                                <span>Inspect</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination Controls */}
+              {auditDiscoveries.length > auditPageSize && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 16px',
+                    borderTop: '1px solid #e2e8f0',
+                    fontSize: '11.5px',
+                    color: '#64748b',
+                  }}
+                >
+                  <div>
+                    Showing <strong>{(auditPage - 1) * auditPageSize + 1}</strong> -{' '}
+                    <strong>{Math.min(auditPage * auditPageSize, auditDiscoveries.length)}</strong> of{' '}
+                    <strong>{auditDiscoveries.length}</strong> audited records
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ height: '26px', padding: '0 8px' }}
+                      disabled={auditPage <= 1}
+                      onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft size={12} /> Prev
+                    </button>
+                    <span style={{ padding: '4px 8px', fontWeight: 600 }}>
+                      Page {auditPage} of {Math.ceil(auditDiscoveries.length / auditPageSize)}
+                    </span>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ height: '26px', padding: '0 8px' }}
+                      disabled={auditPage >= Math.ceil(auditDiscoveries.length / auditPageSize)}
+                      onClick={() => setAuditPage((p) => p + 1)}
+                    >
+                      Next <ChevronRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================== */}
+      {/* MODAL: INDIVIDUAL ARP ENTRY VERIFICATION DOSSIER & AUDIT INSPECTOR (Phase 3 & 4) */}
+      {/* ========================================================== */}
+      {inspectingEntry && (
+        <Modal
+          isOpen={Boolean(inspectingEntry)}
+          onClose={() => setInspectingEntry(null)}
+          title={`ARP Entry Verification Dossier: ${inspectingEntry.ip_address}`}
+          maxWidth={680}
+        >
+          <div>
+            {/* Header Status Strip */}
+            <div
+              style={{
+                backgroundColor: inspectingEntry.has_conflict ? '#fff7ed' : '#f8fafc',
+                border: `1px solid ${inspectingEntry.has_conflict ? '#fed7aa' : '#e2e8f0'}`,
+                borderRadius: '6px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <strong className="mono" style={{ fontSize: '15px', color: '#0284c7' }}>
+                    {inspectingEntry.ip_address}
+                  </strong>
+                  <span className="mono" style={{ fontSize: '13px', color: '#334155' }}>
+                    {inspectingEntry.mac_address || '—'}
+                  </span>
+                  {getVendorFromMac(inspectingEntry.mac_address) && (
+                    <span className="device-type-tag" style={{ fontSize: '10px' }}>
+                      {getVendorFromMac(inspectingEntry.mac_address)}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                  Firewall Port: <strong>{inspectingEntry.interface}</strong>
+                  {' • '}Observed: {formatIndianDateTime(inspectingEntry.discovered_at)}
+                </div>
+              </div>
+
+              <div>
+                {inspectingEntry.verification_status === 'verified' ? (
+                  <span className="status-badge online" style={{ fontSize: '11px', padding: '3px 8px' }}>
+                    <CheckCircle2 size={12} /> VERIFIED LAYER-2 ENTRY
+                  </span>
+                ) : inspectingEntry.verification_status === 'verified_incomplete' ? (
+                  <span className="status-badge warning" style={{ fontSize: '11px', padding: '3px 8px' }}>
+                    <Clock size={12} /> INCOMPLETE ARP (PENDING REPLY)
+                  </span>
+                ) : inspectingEntry.verification_status === 'flagged' ? (
+                  <span className="status-badge offline" style={{ fontSize: '11px', padding: '3px 8px', backgroundColor: '#fee2e2', color: '#b91c1c' }}>
+                    <AlertTriangle size={12} /> FLAGGED CONFLICT
+                  </span>
+                ) : (
+                  <span className="status-badge offline" style={{ fontSize: '11px', padding: '3px 8px' }}>
+                    <AlertCircle size={12} /> REJECTED ENTRY
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Side-by-Side: Raw Firewall Observation vs Normalized & Validated Values (Phase 4) */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                A. Raw Extraction vs B. Validated & Normalized Snapshot
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {/* Left: Raw Observation */}
+                <div style={{ backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '10px 12px', fontSize: '11.5px' }}>
+                  <div style={{ fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <FileText size={12} /> Raw Firewall Observation
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div><span style={{ color: '#64748b' }}>Raw IP:</span> <strong className="mono">{inspectingEntry.ip_address}</strong></div>
+                    <div><span style={{ color: '#64748b' }}>Raw MAC:</span> <strong className="mono">{inspectingEntry.mac_address || '-'}</strong></div>
+                    <div><span style={{ color: '#64748b' }}>Raw Interface:</span> <span className="mono">{inspectingEntry.interface}</span></div>
+                    <div><span style={{ color: '#64748b' }}>Raw State:</span> <span className="mono">{inspectingEntry.arp_state}</span></div>
+                  </div>
+                </div>
+
+                {/* Right: Validated & Normalized Values */}
+                <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '10px 12px', fontSize: '11.5px' }}>
+                  <div style={{ fontWeight: 700, color: '#166534', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <CheckCircle size={12} /> Normalized & Verified Values
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div><span style={{ color: '#166534' }}>IPv4 Format:</span> <strong>{inspectingEntry.is_valid_ipv4 ? '✓ Valid IPv4 Syntax' : '✕ Invalid IP'}</strong></div>
+                    <div><span style={{ color: '#166534' }}>Normalized MAC:</span> <strong className="mono">{inspectingEntry.normalized_mac || 'Pending'}</strong></div>
+                    <div><span style={{ color: '#166534' }}>IEEE 802 Format:</span> <strong className="mono">{inspectingEntry.mac_address || '—'}</strong></div>
+                    <div><span style={{ color: '#166534' }}>Incomplete Flag:</span> <span>{inspectingEntry.is_incomplete ? 'Yes (Normal Pending State)' : 'No'}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed Verification Explanations Checklist (Phase 3) */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Verification Classifications & Audit Ledger
+              </div>
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '10px 14px' }}>
+                {(() => {
+                  let reasons = inspectingEntry.verification_reasons;
+                  if (typeof reasons === 'string') {
+                    try { reasons = JSON.parse(reasons); } catch { reasons = [reasons]; }
+                  }
+                  if (!Array.isArray(reasons) || reasons.length === 0) {
+                    reasons = ['Standard Layer-2 neighbor observation confirmed'];
+                  }
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {reasons.map((r, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                          {r.toLowerCase().includes('duplicate') || r.toLowerCase().includes('conflict') || r.toLowerCase().includes('invalid') ? (
+                            <AlertTriangle size={13} style={{ color: '#dc2626', flexShrink: 0 }} />
+                          ) : r.toLowerCase().includes('incomplete') ? (
+                            <Clock size={13} style={{ color: '#d97706', flexShrink: 0 }} />
+                          ) : (
+                            <CheckCircle2 size={13} style={{ color: '#15803d', flexShrink: 0 }} />
+                          )}
+                          <span style={{ color: '#1e293b' }}>{r}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Decoupled Layer-2 ARP vs Layer-3 Ping Verification Matrix (Phase 7) */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Phase 7: Decoupled ARP Cache vs ICMP Reachability
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {/* L2 ARP */}
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Layer-2 Firewall ARP State</div>
+                  <div style={{ margin: '4px 0' }}><ArpStateBadge state={inspectingEntry.arp_state} /></div>
+                  <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                    Confirmed in Sophos firewall neighbor table on {inspectingEntry.interface}
+                  </div>
+                </div>
+
+                {/* L3 Ping */}
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Layer-3 ICMP Ping Reachability</div>
+                  <div style={{ margin: '4px 0' }}>
+                    {inspectingEntry.ping_status ? (
+                      <StatusBadge status={inspectingEntry.ping_status.toLowerCase()} latency={inspectingEntry.ping_latency} />
+                    ) : (
+                      <span className="status-badge" style={{ backgroundColor: '#f1f5f9', color: '#64748b', fontSize: '10px' }}>
+                        NOT PROBED
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                    {inspectingEntry.ping_checked_at ? `Checked: ${formatIndianDateTime(inspectingEntry.ping_checked_at)}` : 'Periodic ping disabled or pending'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '6px', fontStyle: 'italic' }}>
+                * Architectural rule: An active firewall ARP entry does not guarantee ping response (e.g. host sleep, host firewall blocking ICMP). These statuses are measured and tracked independently.
+              </div>
+            </div>
+
+            {/* Asset Inventory & Registered Node Association */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Asset Inventory & Monitored Device Correlation
+              </div>
+              <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '10px 12px', fontSize: '11.5px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Official Inventory Match: </span>
+                    {inspectingEntry.inventory_device_name ? (
+                      <strong style={{ color: '#0f172a' }}>{inspectingEntry.inventory_device_name}</strong>
+                    ) : (
+                      <span style={{ color: '#94a3b8' }}>Unmatched (Not registered in official inventory)</span>
+                    )}
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Department / Site: </span>
+                    <span>{inspectingEntry.inventory_location || inspectingEntry.inventory_site || '—'}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Inventory Expected IP: </span>
+                    <span className="mono">{inspectingEntry.inventory_expected_ip || '—'}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Monitored Registry Node: </span>
+                    {inspectingEntry.registered_device_name ? (
+                      <strong style={{ color: '#15803d' }}>{inspectingEntry.registered_device_name}</strong>
+                    ) : (
+                      <span style={{ color: '#94a3b8' }}>Unregistered Node</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '10px', borderTop: '1px solid #e2e8f0' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setInspectingEntry(null)}
+              >
+                Close Dossier
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ========================================================== */}
