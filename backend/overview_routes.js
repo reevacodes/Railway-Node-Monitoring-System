@@ -148,6 +148,14 @@ router.get('/api/overview/unified-summary', async (req, res) => {
       ? Math.round((respondingCount / totalUniqueAssets) * 100)
       : 0;
 
+    let pollerMeta = null;
+    try {
+      const { getPersistedPollerStatus } = require('./sophos_arp_service');
+      pollerMeta = await getPersistedPollerStatus();
+    } catch (e) {
+      // ignore
+    }
+
     res.json({
       registered_devices_count: registeredCount,
       latest_arp_raw_count: latestSnap ? latestSnap.total_entries : 0,
@@ -164,11 +172,18 @@ router.get('/api/overview/unified-summary', async (req, res) => {
       ping_unknown_stale_count: unknownStaleCount,
       availability_rate: availabilityRate,
       freshness_threshold_minutes: freshnessMinutes,
+      last_attempt_at: pollerMeta ? pollerMeta.last_attempt_at : null,
+      last_success_at: pollerMeta ? pollerMeta.last_success_at : null,
+      snapshot_created_at: pollerMeta?.snapshot_created_at || (latestSnap ? latestSnap.imported_at : null),
+      polling_status: pollerMeta ? pollerMeta.polling_status : 'idle',
+      polling_error: pollerMeta ? pollerMeta.last_error : null,
+      poller_status: pollerMeta,
       latest_snapshot: latestSnap ? {
         id: latestSnap.id,
         name: latestSnap.snapshot_name,
         source_device: latestSnap.source_device || 'Sophos XGS2100',
         imported_at: latestSnap.imported_at,
+        snapshot_created_at: pollerMeta?.snapshot_created_at || latestSnap.imported_at,
         total_entries: latestSnap.total_entries,
         entries_with_mac: latestSnap.entries_with_mac,
         incomplete_entries: latestSnap.total_entries - latestSnap.entries_with_mac,

@@ -334,6 +334,129 @@ router.get('/api/arp/snapshots/:id/details', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
+// 5c. GET /api/arp/snapshots/:id/export
+// Download snapshot entries as CSV or JSON file (supports :id as 'latest' or integer)
+// ---------------------------------------------------------------------
+router.get('/api/arp/snapshots/:id/export', async (req, res) => {
+  try {
+    let snapshotId;
+    if (req.params.id === 'latest') {
+      const latestRes = await pool.query('SELECT id, snapshot_name, imported_at FROM arp_snapshots ORDER BY id DESC LIMIT 1');
+      if (latestRes.rows.length === 0) {
+        return res.status(404).json({ error: 'No ARP snapshots found in database' });
+      }
+      snapshotId = latestRes.rows[0].id;
+    } else {
+      snapshotId = Number(req.params.id);
+      if (!Number.isInteger(snapshotId) || snapshotId < 1) {
+        return res.status(400).json({ error: 'Invalid snapshot ID' });
+      }
+    }
+
+    const snapRes = await pool.query('SELECT * FROM arp_snapshots WHERE id = $1', [snapshotId]);
+    if (snapRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Snapshot not found' });
+    }
+    const snapshot = snapRes.rows[0];
+
+    const entriesRes = await pool.query(
+      `SELECT 
+        d.ip_address,
+        d.mac_address,
+        d.interface,
+        d.arp_state,
+        CASE
+          WHEN inv.id IS NOT NULL AND reg.id IS NOT NULL THEN 'Matched (Inventory & Registered)'
+          WHEN reg.id IS NOT NULL THEN 'Matched (Registered Node)'
+          WHEN inv.id IS NOT NULL THEN 'Matched (MAC Inventory)'
+          WHEN d.has_mac = false THEN 'No MAC'
+          ELSE 'Unmatched / Discovered'
+        END AS overall_status,
+        d.match_status AS mac_inventory_match,
+        inv.device_name AS mac_inventory_name,
+        inv.department_location,
+        reg.name AS registered_device_name,
+        reg.device_type AS registered_device_type,
+        d.discovered_at
+       FROM arp_discoveries d
+       LEFT JOIN mac_inventory inv ON inv.id = d.matched_inventory_id
+       LEFT JOIN devices reg ON (
+         (reg.ip_address IS NOT NULL AND reg.ip_address = d.ip_address)
+         OR (reg.mac_address IS NOT NULL AND LOWER(REPLACE(reg.mac_address, ':', '')) = d.normalized_mac)
+       )
+       WHERE d.snapshot_id = $1
+       ORDER BY d.ip_address ASC, d.id ASC`,
+      [snapshotId]
+    );
+
+    const format = (req.query.format || 'csv').toLowerCase();
+    const dateStr = new Date(snapshot.imported_at).toISOString().slice(0, 10);
+
+    if (format === 'json') {
+      const filename = `sophos_arp_snapshot_${snapshotId}_${dateStr}.json`;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.json({
+        snapshot,
+        totalEntries: entriesRes.rows.length,
+        entries: entriesRes.rows,
+      });
+    }
+
+    // Default to CSV
+    const filename = `sophos_arp_snapshot_${snapshotId}_${dateStr}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const headers = [
+      'IP Address',
+      'MAC Address',
+      'Interface',
+      'ARP State',
+      'Overall Status',
+      'MAC Inventory Match',
+      'MAC Inventory Device Name',
+      'Department / Location',
+      'Registered Device Name',
+      'Device Type',
+      'Discovered At',
+    ];
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    let csvContent = headers.join(',') + '\r\n';
+    for (const row of entriesRes.rows) {
+      const cols = [
+        escapeCsv(row.ip_address),
+        escapeCsv(row.mac_address),
+        escapeCsv(row.interface),
+        escapeCsv(row.arp_state),
+        escapeCsv(row.overall_status),
+        escapeCsv(row.mac_inventory_match),
+        escapeCsv(row.mac_inventory_name),
+        escapeCsv(row.department_location),
+        escapeCsv(row.registered_device_name),
+        escapeCsv(row.registered_device_type),
+        escapeCsv(row.discovered_at ? new Date(row.discovered_at).toLocaleString() : ''),
+      ];
+      csvContent += cols.join(',') + '\r\n';
+    }
+
+    res.send(csvContent);
+  } catch (err) {
+    console.error('Export snapshot failed:', err.message);
+    res.status(500).json({ error: 'Could not export snapshot' });
+  }
+});
+
+// ---------------------------------------------------------------------
 // 6. POST /api/arp/snapshots/import
 // Import an ARP snapshot (canonical JSON, uploaded content, or CSV)
 // ---------------------------------------------------------------------
@@ -523,10 +646,10 @@ router.get('/api/arp/summary', async (req, res) => {
 // 10. GET /api/arp/poller/status
 // Operational status of automated Sophos ARP poller
 // ---------------------------------------------------------------------
-router.get('/api/arp/poller/status', (req, res) => {
+router.get('/api/arp/poller/status', async (req, res) => {
   try {
-    const { getArpPollerStatus } = require('./sophos_arp_service');
-    res.json(getArpPollerStatus());
+    const { getPersistedPollerStatus } = require('./sophos_arp_service');
+    res.json(await getPersistedPollerStatus());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

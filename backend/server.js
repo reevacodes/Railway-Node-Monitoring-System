@@ -697,13 +697,16 @@ async function runMonitoringCycle() {
             return;
         }
 
-        // Auto-resolve IP from firewall discovered_devices for registered nodes with MAC address
+        // Auto-resolve IP from live Sophos arp_discoveries for registered nodes with MAC address
         for (const device of devices) {
             if (!device.ip_address && device.mac_address) {
                 const cleanMac = device.mac_address.toLowerCase().replace(/[^a-f0-9]/g, '');
                 try {
                     const matchRes = await pool.query(
-                        "SELECT ip_address FROM discovered_devices WHERE LOWER(REPLACE(mac_address, ':', '')) = $1 LIMIT 1",
+                        `SELECT ip_address, snapshot_id FROM arp_discoveries 
+                         WHERE normalized_mac = $1 
+                         ORDER BY snapshot_id DESC, id DESC 
+                         LIMIT 1`,
                         [cleanMac]
                     );
                     if (matchRes.rows.length > 0) {
@@ -718,7 +721,7 @@ async function runMonitoringCycle() {
                                 [matchedIp, device.id]
                             );
                             device.ip_address = matchedIp;
-                            console.log(`[Auto-Discovered] ${device.name} (MAC: ${device.mac_address}) auto-assigned IP ${matchedIp} from firewall ARP.`);
+                            console.log(`[Auto-Discovered] ${device.name} (MAC: ${device.mac_address}) auto-assigned IP ${matchedIp} from Sophos Snapshot #${matchRes.rows[0].snapshot_id}.`);
                         }
                     }
                 } catch (err) {

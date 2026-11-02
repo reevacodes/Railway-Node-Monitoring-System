@@ -36,10 +36,8 @@ import {
   MapPin,
   Tag,
   Check,
-  Train,
+  Download,
 } from 'lucide-react';
-import RailwayTopologyHub from '../components/overview/RailwayTopologyHub';
-import { AnimatedCounter } from '../utils/motion';
 import {
   ResponsiveContainer,
   LineChart,
@@ -106,13 +104,13 @@ export const Overview = () => {
   const [isUnifiedLoading, setIsUnifiedLoading] = useState(true);
   const [devicesError, setDevicesError] = useState(null);
 
-  // Helper to render metric values with loading spinners and smooth count-up
+  // Helper to render metric values with loading spinners and robust zero display
   const renderMetricValue = (val, isLoading) => {
     if (isLoading && (val === undefined || val === null)) {
       return <RefreshCw size={14} className="spin" style={{ display: 'inline-block', opacity: 0.6 }} />;
     }
     if (typeof val === 'number') {
-      return <AnimatedCounter value={val} />;
+      return val;
     }
     if (val !== null && val !== undefined) {
       return val;
@@ -195,16 +193,6 @@ export const Overview = () => {
     }
   };
 
-  // Handle Hub Section filter from RailwayTopologyHub
-  const handleSelectHubSection = (filterKey) => {
-    setUnifiedSearch(filterKey);
-    setUnifiedPage(1);
-    const tableEl = document.getElementById('unified-device-health-table');
-    if (tableEl) {
-      tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
   // ----------------------------------------------------
   // Legacy Department / Section Calculations (for Modal)
   // ----------------------------------------------------
@@ -277,39 +265,14 @@ export const Overview = () => {
   return (
     <div>
       {/* Page Title & Actions Strip */}
-      <div className="page-title-strip" style={{ marginBottom: '18px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-          <div
-            style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: 'var(--radius-md)',
-              background: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)',
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(2, 132, 199, 0.25)',
-              flexShrink: 0,
-            }}
-          >
-            <Train size={20} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '19px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.02em', margin: 0 }}>
-                Railway Network Operations Center (NOC)
-              </h1>
-              <span className="status-badge online" style={{ fontSize: '10.5px', padding: '2px 8px' }}>
-                <span className="status-dot" /> Live Telemetry
-              </span>
-            </div>
-            <div className="page-subtitle" style={{ marginTop: '3px' }}>
-              Centralized health monitoring, Layer-2 Sophos ARP correlation, ICMP reachability & unified asset intelligence
-            </div>
+      <div className="page-title-strip">
+        <div>
+          <h1>Railway Network Operations Center (NOC)</h1>
+          <div className="page-subtitle">
+            Centralized health monitoring, Layer-2 Sophos ARP correlation, ICMP reachability & unified asset intelligence
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => {
@@ -369,39 +332,31 @@ export const Overview = () => {
       {/* ========================================================= */}
       {/* 1. PRIMARY OPERATIONAL METRIC CARDS (Unified & Deduplicated) */}
       {/* ========================================================= */}
-      <div className="operational-strip" style={{ marginBottom: '16px' }}>
+      <div className="operational-strip" style={{ marginBottom: '12px' }}>
         {/* Card 1: Total Unique Assets */}
         <div
-          className={`operational-metric ${unifiedFilter === 'ALL' ? 'active' : ''}`}
+          className="operational-metric"
           onClick={() => handleCardFilterClick('ALL')}
-          style={{
-            cursor: 'pointer',
-            borderTop: unifiedFilter === 'ALL' ? '3px solid #0284c7' : '3px solid transparent',
-            backgroundColor: unifiedFilter === 'ALL' ? '#f0f9ff' : undefined,
-          }}
-          title="Click to show all unique observed devices"
+          style={{ cursor: 'pointer', border: unifiedFilter === 'ALL' ? '2px solid #0284c7' : undefined }}
+          title="Click to show all unique observed devices (26 Managed in DB + 183 Discovered via Sophos)"
         >
           <span className="operational-metric-label">
-            <Server size={13} style={{ color: 'var(--accent-primary)' }} /> Unique Observed Assets
+            <Server size={13} /> Unique Observed Assets
           </span>
           <span className="operational-metric-value">
             {renderMetricValue(unifiedSummary?.total_unique_observed_assets, isSummaryLoading)}
           </span>
           <span className="metric-sub">
-            {unifiedSummary ? `${unifiedSummary.registered_devices_count} Managed + ${unifiedSummary.unmanaged_discovered_count} Discovered` : 'Deduplicated railway nodes'}
+            {unifiedSummary ? `${unifiedSummary.registered_devices_count} Managed + ${unifiedSummary.unmanaged_discovered_count} Discovered (Deduplicated)` : 'Deduplicated railway nodes'}
           </span>
         </div>
 
         {/* Card 2: Responding to Ping */}
         <div
-          className={`operational-metric ${unifiedFilter === 'ONLINE' ? 'active' : ''}`}
+          className="operational-metric"
           onClick={() => handleCardFilterClick('ONLINE')}
-          style={{
-            cursor: 'pointer',
-            borderTop: unifiedFilter === 'ONLINE' ? '3px solid #059669' : '3px solid transparent',
-            backgroundColor: unifiedFilter === 'ONLINE' ? '#ecfdf5' : undefined,
-          }}
-          title="Click to filter by devices actively responding to ICMP ping"
+          style={{ cursor: 'pointer', border: unifiedFilter === 'ONLINE' ? '2px solid #059669' : undefined }}
+          title="Click to filter by devices actively responding to ICMP ping within freshness window"
         >
           <span className="operational-metric-label" style={{ color: '#059669' }}>
             <CheckCircle2 size={13} /> Responding to Ping
@@ -416,14 +371,10 @@ export const Overview = () => {
 
         {/* Card 3: No Ping Reply */}
         <div
-          className={`operational-metric ${unifiedFilter === 'OFFLINE' ? 'active' : ''}`}
+          className="operational-metric"
           onClick={() => handleCardFilterClick('OFFLINE')}
-          style={{
-            cursor: 'pointer',
-            borderTop: unifiedFilter === 'OFFLINE' ? '3px solid #dc2626' : '3px solid transparent',
-            backgroundColor: unifiedFilter === 'OFFLINE' ? '#fef2f2' : undefined,
-          }}
-          title="Click to filter by devices with no ICMP reply"
+          style={{ cursor: 'pointer', border: unifiedFilter === 'OFFLINE' ? '2px solid #dc2626' : undefined }}
+          title="Click to filter by devices with no ICMP reply in recent cycle"
         >
           <span className="operational-metric-label" style={{ color: '#dc2626' }}>
             <AlertTriangle size={13} /> No Ping Reply
@@ -431,18 +382,14 @@ export const Overview = () => {
           <span className="operational-metric-value" style={{ color: '#dc2626' }}>
             {renderMetricValue(unifiedSummary?.ping_no_reply_count, isSummaryLoading)}
           </span>
-          <span className="metric-sub">Probe timed out / unreachable</span>
+          <span className="metric-sub">Probe timed out / host unreachable</span>
         </div>
 
         {/* Card 4: Unknown / Stale */}
         <div
-          className={`operational-metric ${unifiedFilter === 'UNKNOWN' ? 'active' : ''}`}
+          className="operational-metric"
           onClick={() => handleCardFilterClick('UNKNOWN')}
-          style={{
-            cursor: 'pointer',
-            borderTop: unifiedFilter === 'UNKNOWN' ? '3px solid #64748b' : '3px solid transparent',
-            backgroundColor: unifiedFilter === 'UNKNOWN' ? '#f1f5f9' : undefined,
-          }}
+          style={{ cursor: 'pointer', border: unifiedFilter === 'UNKNOWN' ? '2px solid #64748b' : undefined }}
           title="Click to filter by devices with no probe result within freshness threshold"
         >
           <span className="operational-metric-label" style={{ color: '#475569' }}>
@@ -451,24 +398,20 @@ export const Overview = () => {
           <span className="operational-metric-value">
             {renderMetricValue(unifiedSummary?.ping_unknown_stale_count, isSummaryLoading)}
           </span>
-          <span className="metric-sub">No probe in {unifiedSummary?.freshness_threshold_minutes || 10}m window</span>
+          <span className="metric-sub">No probe within {unifiedSummary?.freshness_threshold_minutes || 10} min</span>
         </div>
 
         {/* Card 5: Managed Devices */}
         <div
-          className={`operational-metric ${unifiedFilter === 'MANAGED' ? 'active' : ''}`}
+          className="operational-metric"
           onClick={() => handleCardFilterClick('MANAGED')}
-          style={{
-            cursor: 'pointer',
-            borderTop: unifiedFilter === 'MANAGED' ? '3px solid #7c3aed' : '3px solid transparent',
-            backgroundColor: unifiedFilter === 'MANAGED' ? '#f5f3ff' : undefined,
-          }}
+          style={{ cursor: 'pointer', border: unifiedFilter === 'MANAGED' ? '2px solid #8b5cf6' : undefined }}
           title="Click to filter by registered managed inventory"
         >
-          <span className="operational-metric-label" style={{ color: '#7c3aed' }}>
-            <Server size={13} /> Managed Nodes
+          <span className="operational-metric-label" style={{ color: '#8b5cf6' }}>
+            <Server size={13} /> Managed Devices
           </span>
-          <span className="operational-metric-value" style={{ color: '#7c3aed' }}>
+          <span className="operational-metric-value" style={{ color: '#8b5cf6' }}>
             {renderMetricValue(unifiedSummary?.registered_devices_count, isSummaryLoading)}
           </span>
           <span className="metric-sub">Registered railway inventory</span>
@@ -476,13 +419,9 @@ export const Overview = () => {
 
         {/* Card 6: Unmanaged Discovered */}
         <div
-          className={`operational-metric ${unifiedFilter === 'UNMANAGED' ? 'active' : ''}`}
+          className="operational-metric"
           onClick={() => handleCardFilterClick('UNMANAGED')}
-          style={{
-            cursor: 'pointer',
-            borderTop: unifiedFilter === 'UNMANAGED' ? '3px solid #0284c7' : '3px solid transparent',
-            backgroundColor: unifiedFilter === 'UNMANAGED' ? '#f0f9ff' : undefined,
-          }}
+          style={{ cursor: 'pointer', border: unifiedFilter === 'UNMANAGED' ? '2px solid #0284c7' : undefined }}
           title="Click to filter by unmanaged discovered devices"
         >
           <span className="operational-metric-label" style={{ color: '#0284c7' }}>
@@ -499,14 +438,12 @@ export const Overview = () => {
       {/* 2. SECONDARY DISCOVERY & CORRELATION METRICS STRIP */}
       {/* ========================================================= */}
       <div
-        className="panel"
         style={{
           backgroundColor: '#ffffff',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          padding: '12px 16px',
+          border: '1px solid #e2e8f0',
+          borderRadius: '4px',
+          padding: '10px 14px',
           marginBottom: '16px',
-          boxShadow: 'var(--shadow-card)',
         }}
       >
         <div
@@ -520,16 +457,16 @@ export const Overview = () => {
           onClick={() => setShowSecondaryStats((prev) => !prev)}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Shield size={15} style={{ color: 'var(--accent-primary)' }} />
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+            <Shield size={14} style={{ color: '#0284c7' }} />
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>
               Sophos Firewall Neighbor Cache Intelligence & Discovery Correlation
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: '11px', color: '#64748b' }}>
               (Click to {showSecondaryStats ? 'collapse' : 'expand'})
             </span>
           </div>
           <div>
-            {showSecondaryStats ? <ChevronUp size={15} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={15} style={{ color: 'var(--text-muted)' }} />}
+            {showSecondaryStats ? <ChevronUp size={15} style={{ color: '#64748b' }} /> : <ChevronDown size={15} style={{ color: '#64748b' }} />}
           </div>
         </div>
 
@@ -545,65 +482,65 @@ export const Overview = () => {
             }}
           >
             {/* Card 7: Latest ARP Entries */}
-            <div style={{ padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Latest ARP Poll Entries</div>
-              <div className="mono" style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
+            <div style={{ padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Latest ARP Poll Entries</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
                 {renderMetricValue(unifiedSummary?.latest_arp_raw_count, isSummaryLoading)}
               </div>
-              <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Raw neighbor cache rows</div>
+              <div style={{ fontSize: '10.5px', color: '#64748b' }}>Raw neighbor cache rows</div>
             </div>
 
             {/* Card 8: Confirmed MAC Nodes */}
-            <div style={{ padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Confirmed MAC Nodes</div>
-              <div className="mono" style={{ fontSize: '18px', fontWeight: 800, color: '#0284c7', marginTop: '2px' }}>
+            <div style={{ padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Confirmed MAC Nodes</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#0284c7', marginTop: '2px' }}>
                 {renderMetricValue(unifiedSummary?.valid_mac_devices_count, isSummaryLoading)}
               </div>
-              <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Valid Layer-2 hardware entries</div>
+              <div style={{ fontSize: '10.5px', color: '#64748b' }}>Valid Layer-2 hardware entries</div>
             </div>
 
             {/* Card 9: Matched to MAC Inventory */}
             <div
               onClick={() => handleCardFilterClick('INVENTORY_MATCHED')}
               style={{
-                padding: '8px 12px',
-                backgroundColor: unifiedFilter === 'INVENTORY_MATCHED' ? '#ecfdf5' : '#f8fafc',
-                borderRadius: 'var(--radius-sm)',
-                border: unifiedFilter === 'INVENTORY_MATCHED' ? '1px solid #10b981' : '1px solid var(--border-subtle)',
+                padding: '6px 10px',
+                backgroundColor: '#f8fafc',
+                borderRadius: '4px',
+                border: unifiedFilter === 'INVENTORY_MATCHED' ? '2px solid #10b981' : '1px solid #e2e8f0',
                 cursor: 'pointer',
               }}
               title="Click to filter by devices correlated with station MAC inventory"
             >
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Matched to MAC Inventory</div>
-              <div className="mono" style={{ fontSize: '18px', fontWeight: 800, color: '#10b981', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Matched to MAC Inventory</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#10b981', marginTop: '2px' }}>
                 {renderMetricValue(unifiedSummary?.matched_to_inventory_count, isSummaryLoading)}
               </div>
-              <div style={{ fontSize: '10.5px', color: '#059669', fontWeight: 600 }}>Correlated with inventory records</div>
+              <div style={{ fontSize: '10.5px', color: '#059669', fontWeight: 500 }}>Correlated with inventory records</div>
             </div>
 
             {/* Card 10: Matched to Registered Nodes */}
-            <div style={{ padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Matched to Registered Nodes</div>
-              <div className="mono" style={{ fontSize: '18px', fontWeight: 800, color: '#8b5cf6', marginTop: '2px' }}>
+            <div style={{ padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Matched to Registered Nodes</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#8b5cf6', marginTop: '2px' }}>
                 {renderMetricValue(unifiedSummary?.matched_to_registered_count, isSummaryLoading)}
               </div>
-              <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Linked to managed devices</div>
+              <div style={{ fontSize: '10.5px', color: '#64748b' }}>Linked to managed devices</div>
             </div>
 
             {/* Card 11: Newly Discovered */}
             <div
               onClick={() => handleCardFilterClick('NEWLY_DISCOVERED')}
               style={{
-                padding: '8px 12px',
-                backgroundColor: unifiedFilter === 'NEWLY_DISCOVERED' ? '#fffbeb' : '#f8fafc',
-                borderRadius: 'var(--radius-sm)',
-                border: unifiedFilter === 'NEWLY_DISCOVERED' ? '1px solid #f59e0b' : '1px solid var(--border-subtle)',
+                padding: '6px 10px',
+                backgroundColor: '#f8fafc',
+                borderRadius: '4px',
+                border: unifiedFilter === 'NEWLY_DISCOVERED' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
                 cursor: 'pointer',
               }}
               title="Click to filter by devices first seen in the latest firewall snapshot"
             >
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Newly Discovered</div>
-              <div className="mono" style={{ fontSize: '18px', fontWeight: 800, color: '#f59e0b', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Newly Discovered</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#f59e0b', marginTop: '2px' }}>
                 {renderMetricValue(unifiedSummary?.newly_discovered_count, isSummaryLoading)}
               </div>
               <div style={{ fontSize: '10.5px', color: '#b45309' }}>
@@ -612,164 +549,232 @@ export const Overview = () => {
             </div>
           </div>
         )}
+
       </div>
 
       {/* ========================================================= */}
       {/* 3. LATEST SOPHOS ARP POLL METADATA PANEL */}
       {/* ========================================================= */}
-      {unifiedSummary?.latest_snapshot && (
-        <div
-          className="panel"
-          style={{
-            marginBottom: '18px',
-            backgroundColor: '#ffffff',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-card)',
-          }}
-        >
+      {unifiedSummary?.latest_snapshot && (() => {
+        const lastAttempt = unifiedSummary.last_attempt_at || unifiedSummary.poller_status?.last_attempt_at;
+        const lastSuccess = unifiedSummary.last_success_at || unifiedSummary.poller_status?.last_success_at;
+        const snapCreated = unifiedSummary.snapshot_created_at || unifiedSummary.latest_snapshot.imported_at;
+        const status = unifiedSummary.polling_status || unifiedSummary.poller_status?.polling_status || 'idle';
+        const errorMsg = unifiedSummary.polling_error || unifiedSummary.poller_status?.last_error;
+
+        return (
           <div
             style={{
-              padding: '12px 18px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              padding: '14px 16px',
+              marginBottom: '16px',
+              borderLeft: '4px solid #0284c7',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: '#e0f2fe',
-                  color: '#0284c7',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Radio size={20} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '8px',
+                    backgroundColor: '#e0f2fe',
+                    color: '#0284c7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Radio size={20} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>
+                      {unifiedSummary.latest_snapshot.name}
+                    </span>
+                    {status === 'in_progress' ? (
+                      <span className="status-badge warning" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                        <RefreshCw size={10} className="spin" /> Polling in Progress...
+                      </span>
+                    ) : status === 'success_new' ? (
+                      <span className="status-badge online" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                        <Check size={10} /> Snapshot Updated Successfully
+                      </span>
+                    ) : status === 'success_duplicate' ? (
+                      <span className="status-badge online" style={{ fontSize: '10px', padding: '1px 6px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
+                        <Check size={10} /> Data Unchanged (Duplicate Skipped)
+                      </span>
+                    ) : status === 'failed' ? (
+                      <span className="status-badge offline" style={{ fontSize: '10px', padding: '1px 6px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+                        <AlertTriangle size={10} /> Extraction Failed (Preserving Snapshot)
+                      </span>
+                    ) : (
+                      <span className="status-badge online" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                        <Check size={10} /> Verified Snapshot
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    Source: <strong>{unifiedSummary.latest_snapshot.source_device}</strong>
+                    {' • '}
+                    Raw Entries: <strong>{unifiedSummary.latest_snapshot.total_entries}</strong> (
+                    <span style={{ color: '#059669', fontWeight: 600 }}>{unifiedSummary.latest_snapshot.entries_with_mac} valid MAC</span>,{' '}
+                    <span style={{ color: '#dc2626' }}>{unifiedSummary.latest_snapshot.incomplete_entries} incomplete</span>)
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <a
+                  href={`${api.baseUrl || 'http://localhost:5001'}/api/arp/snapshots/latest/export?format=csv`}
+                  download
+                  className="btn btn-primary btn-sm"
+                  style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
+                  title="Download all entries from latest firewall snapshot as CSV"
+                >
+                  <Download size={12} /> Download Snapshot (CSV)
+                </a>
+                <Link to="/arp-discovery" className="btn btn-secondary btn-sm" style={{ fontSize: '11px' }}>
+                  Snapshot History <ArrowRight size={12} />
+                </Link>
+              </div>
+            </div>
+
+            {/* THREE DISTINCT TIMESTAMPS BAR */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '10px',
+                padding: '10px 12px',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '11px',
+              }}
+            >
+              <div>
+                <span style={{ color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 500 }}>
+                  Last Poll Attempt:
+                </span>
+                <strong className="mono" style={{ color: '#0f172a', fontSize: '12px' }}>
+                  {lastAttempt ? formatIndianDateTime(lastAttempt) : 'None recorded'}
+                </strong>
               </div>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-main)' }}>
-                    {unifiedSummary.latest_snapshot.name}
-                  </span>
-                  <span className="status-badge online" style={{ fontSize: '10.5px', padding: '2px 8px' }}>
-                    <Check size={11} /> Live Snapshot Verified
-                  </span>
-                </div>
-                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span>Collection Timestamp:</span>
-                  <strong className="mono" style={{ color: 'var(--accent-primary)' }}>
-                    {formatIndianDateTime(unifiedSummary.latest_snapshot.imported_at)}
-                  </strong>
-                  <span>•</span>
-                  <span>Source: <strong>{unifiedSummary.latest_snapshot.source_device}</strong></span>
-                  <span>•</span>
-                  <span>Raw Entries: <strong>{unifiedSummary.latest_snapshot.total_entries}</strong> (
-                    <span style={{ color: '#059669', fontWeight: 600 }}>{unifiedSummary.latest_snapshot.entries_with_mac} valid MAC</span>,{' '}
-                    <span style={{ color: '#dc2626', fontWeight: 600 }}>{unifiedSummary.latest_snapshot.incomplete_entries} incomplete</span>)
-                  </span>
-                </div>
+                <span style={{ color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 500 }}>
+                  Last Successful Extraction:
+                </span>
+                <strong className="mono" style={{ color: '#059669', fontSize: '12px' }}>
+                  {lastSuccess ? formatIndianDateTime(lastSuccess) : 'None recorded'}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 500 }}>
+                  Latest Snapshot Created:
+                </span>
+                <strong className="mono" style={{ color: '#0284c7', fontSize: '12px' }}>
+                  {snapCreated ? formatIndianDateTime(snapCreated) : 'None recorded'}
+                </strong>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Link to="/arp-discovery" className="btn btn-secondary btn-sm" style={{ fontSize: '11px' }}>
-                Snapshot History <ArrowRight size={12} />
-              </Link>
-            </div>
+            {/* CONTEXTUAL ERROR / DUPLICATE STATUS NOTIFICATION */}
+            {status === 'failed' && (
+              <div style={{ marginTop: '10px', fontSize: '11px', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px', background: '#fffbeb', padding: '6px 10px', borderRadius: '4px', border: '1px solid #fef3c7' }}>
+                <AlertTriangle size={13} color="#d97706" style={{ flexShrink: 0 }} />
+                <span>
+                  <strong>Extraction Warning:</strong> Last attempt at {lastAttempt ? formatIndianTime(lastAttempt) : 'recent'} failed{errorMsg ? ` (${errorMsg.slice(0, 120)})` : ''}. Safely retaining previous verified extraction and snapshot.
+                </span>
+              </div>
+            )}
+            {status === 'success_duplicate' && (
+              <div style={{ marginTop: '10px', fontSize: '11px', color: '#047857', display: 'flex', alignItems: 'center', gap: '6px', background: '#ecfdf5', padding: '6px 10px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>
+                <Check size={13} color="#059669" style={{ flexShrink: 0 }} />
+                <span>
+                  <strong>Firewall In-Sync:</strong> Extraction succeeded at {lastSuccess ? formatIndianTime(lastSuccess) : 'recent'}. All entries matched the existing snapshot, skipping duplicate creation.
+                </span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================= */}
-      {/* 4. RAILWAY NETWORK CONDUITS & TOPOLOGY HUB */}
+      {/* 4. UNIFIED DEDUPLICATED DEVICE HEALTH TABLE */}
       {/* ========================================================= */}
-      <RailwayTopologyHub
-        devices={devices}
-        deviceStatuses={deviceStatuses}
-        onSelectSection={handleSelectHubSection}
-      />
-
-      {/* ========================================================= */}
-      {/* 5. UNIFIED DEDUPLICATED DEVICE HEALTH TABLE */}
-      {/* ========================================================= */}
-      <div id="unified-device-health-table" className="panel" style={{ marginBottom: '20px' }}>
+      <div id="unified-device-health-table" className="panel" style={{ marginBottom: '16px' }}>
         <div
           style={{
-            padding: '12px 18px',
+            padding: '10px 14px',
             backgroundColor: '#f8fafc',
-            borderBottom: '1px solid var(--border-subtle)',
+            borderBottom: '1px solid #e2e8f0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '10px',
+            gap: '8px',
           }}
         >
           {/* Quick Filter Pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginRight: '4px' }}>
               Population Filter:
             </span>
             <button
               className={`btn btn-sm ${unifiedFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px' }}
+              style={{ fontSize: '11px', padding: '2px 9px' }}
               onClick={() => { setUnifiedFilter('ALL'); setUnifiedPage(1); }}
             >
               All Assets ({unifiedSummary ? unifiedSummary.total_unique_observed_assets : '…'})
             </button>
             <button
               className={`btn btn-sm ${unifiedFilter === 'ONLINE' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px', color: unifiedFilter === 'ONLINE' ? '#fff' : '#059669' }}
+              style={{ fontSize: '11px', padding: '2px 9px', color: unifiedFilter === 'ONLINE' ? '#fff' : '#059669' }}
               onClick={() => { setUnifiedFilter('ONLINE'); setUnifiedPage(1); }}
             >
               Online ({unifiedSummary ? unifiedSummary.ping_responding_count : '…'})
             </button>
             <button
               className={`btn btn-sm ${unifiedFilter === 'OFFLINE' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px', color: unifiedFilter === 'OFFLINE' ? '#fff' : '#dc2626' }}
+              style={{ fontSize: '11px', padding: '2px 9px', color: unifiedFilter === 'OFFLINE' ? '#fff' : '#dc2626' }}
               onClick={() => { setUnifiedFilter('OFFLINE'); setUnifiedPage(1); }}
             >
               No Ping Reply ({unifiedSummary ? unifiedSummary.ping_no_reply_count : '…'})
             </button>
             <button
               className={`btn btn-sm ${unifiedFilter === 'UNKNOWN' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px' }}
+              style={{ fontSize: '11px', padding: '2px 9px' }}
               onClick={() => { setUnifiedFilter('UNKNOWN'); setUnifiedPage(1); }}
             >
               Unknown / Stale ({unifiedSummary ? unifiedSummary.ping_unknown_stale_count : '…'})
             </button>
             <button
               className={`btn btn-sm ${unifiedFilter === 'MANAGED' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px', color: unifiedFilter === 'MANAGED' ? '#fff' : '#7c3aed' }}
+              style={{ fontSize: '11px', padding: '2px 9px', color: unifiedFilter === 'MANAGED' ? '#fff' : '#8b5cf6' }}
               onClick={() => { setUnifiedFilter('MANAGED'); setUnifiedPage(1); }}
             >
               Managed ({unifiedSummary ? unifiedSummary.registered_devices_count : '…'})
             </button>
             <button
               className={`btn btn-sm ${unifiedFilter === 'UNMANAGED' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px', color: unifiedFilter === 'UNMANAGED' ? '#fff' : '#0284c7' }}
+              style={{ fontSize: '11px', padding: '2px 9px', color: unifiedFilter === 'UNMANAGED' ? '#fff' : '#0284c7' }}
               onClick={() => { setUnifiedFilter('UNMANAGED'); setUnifiedPage(1); }}
             >
               Unmanaged ({unifiedSummary ? unifiedSummary.unmanaged_discovered_count : '…'})
             </button>
             <button
               className={`btn btn-sm ${unifiedFilter === 'INVENTORY_MATCHED' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px', color: unifiedFilter === 'INVENTORY_MATCHED' ? '#fff' : '#10b981' }}
+              style={{ fontSize: '11px', padding: '2px 9px', color: unifiedFilter === 'INVENTORY_MATCHED' ? '#fff' : '#10b981' }}
               onClick={() => { setUnifiedFilter('INVENTORY_MATCHED'); setUnifiedPage(1); }}
             >
               Inventory Matched ({unifiedSummary ? unifiedSummary.matched_to_inventory_count : '…'})
             </button>
             <button
               className={`btn btn-sm ${unifiedFilter === 'NEWLY_DISCOVERED' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ fontSize: '11px', padding: '3px 10px', color: unifiedFilter === 'NEWLY_DISCOVERED' ? '#fff' : '#f59e0b' }}
+              style={{ fontSize: '11px', padding: '2px 9px', color: unifiedFilter === 'NEWLY_DISCOVERED' ? '#fff' : '#f59e0b' }}
               onClick={() => { setUnifiedFilter('NEWLY_DISCOVERED'); setUnifiedPage(1); }}
             >
               Newly Discovered ({unifiedSummary ? (unifiedSummary.newly_discovered_endpoints_count ?? unifiedSummary.newly_discovered_count) : '…'})
@@ -779,7 +784,7 @@ export const Overview = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               className="btn btn-secondary btn-sm"
-              style={{ fontSize: '11.5px', padding: '4px 10px' }}
+              style={{ fontSize: '11px', padding: '3px 8px' }}
               onClick={fetchUnifiedDevices}
             >
               <RefreshCw size={11} className={isUnifiedLoading ? 'spin' : ''} /> Refresh Table
@@ -788,17 +793,17 @@ export const Overview = () => {
         </div>
 
         {/* Search Toolbar */}
-        <div className="filter-toolbar" style={{ padding: '10px 18px' }}>
+        <div className="filter-toolbar">
           <div className="filter-group">
-            <div style={{ position: 'relative', width: '300px' }}>
+            <div style={{ position: 'relative', width: '280px' }}>
               <Search
                 size={13}
-                style={{ position: 'absolute', left: '10px', top: '10px', color: 'var(--text-muted)' }}
+                style={{ position: 'absolute', left: '8px', top: '9px', color: '#94a3b8' }}
               />
               <input
                 type="text"
                 className="form-input"
-                style={{ paddingLeft: '30px', height: '32px', fontSize: '12px' }}
+                style={{ paddingLeft: '28px', height: '30px', fontSize: '11.5px' }}
                 placeholder="Search device name, IP, MAC, location..."
                 value={unifiedSearch}
                 onChange={(e) => setUnifiedSearch(e.target.value)}
@@ -809,12 +814,12 @@ export const Overview = () => {
                   style={{
                     position: 'absolute',
                     right: '8px',
-                    top: '8px',
+                    top: '7px',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    color: 'var(--text-muted)',
-                    fontSize: '13px'
+                    color: '#94a3b8',
+                    fontSize: '12px'
                   }}
                   title="Clear search"
                 >
@@ -824,19 +829,19 @@ export const Overview = () => {
             </div>
           </div>
 
-          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11px', color: '#64748b' }}>
             Showing page <strong>{unifiedPage}</strong> of <strong>{unifiedTotalPages}</strong> ({unifiedTotal} matching assets)
           </div>
         </div>
 
         {/* Unified Table Body */}
         <div className="panel-body" style={{ padding: '0' }}>
-          {isUnifiedLoading && unifiedDevices.length === 0 ? (
+          {isUnifiedLoading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
               <RefreshCw size={24} className="spin" style={{ margin: '0 auto 8px' }} />
               <div>Loading unified device telemetry...</div>
             </div>
-          ) : devicesError && unifiedDevices.length === 0 ? (
+          ) : devicesError ? (
             <div style={{ padding: '40px', textAlign: 'center', color: '#b91c1c' }}>
               <AlertTriangle size={28} style={{ margin: '0 auto 8px', color: '#dc2626' }} />
               <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>
@@ -859,19 +864,19 @@ export const Overview = () => {
             />
           ) : (
             <div className="table-wrapper">
-              <table className="table" style={{ fontSize: '12px' }}>
+              <table className="table" style={{ fontSize: '11.5px' }}>
                 <thead>
                   <tr>
-                    <th style={{ minWidth: '160px' }}>Device Identification</th>
-                    <th style={{ minWidth: '120px' }}>IP Address</th>
-                    <th style={{ minWidth: '150px' }}>MAC Address & Vendor</th>
-                    <th style={{ minWidth: '125px' }}>Classification</th>
-                    <th style={{ minWidth: '150px' }}>Department / Location</th>
-                    <th style={{ minWidth: '105px' }}>MAC Inventory</th>
-                    <th style={{ minWidth: '115px' }}>Ping Reachability</th>
-                    <th style={{ minWidth: '100px' }}>Last Probe Time</th>
-                    <th style={{ minWidth: '100px' }}>ARP Observed</th>
-                    <th style={{ textAlign: 'center', width: '85px' }}>Details</th>
+                    <th>Device Identification</th>
+                    <th>IP Address</th>
+                    <th>MAC Address & Vendor</th>
+                    <th>Classification</th>
+                    <th>Department / Location</th>
+                    <th>MAC Inventory</th>
+                    <th>Ping Reachability</th>
+                    <th>Last Probe Time</th>
+                    <th>ARP Observed</th>
+                    <th style={{ textAlign: 'center', width: '90px' }}>Details</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -884,8 +889,8 @@ export const Overview = () => {
                       <tr key={dev.unique_key} className={isOffline ? 'row-offline' : ''}>
                         {/* 1. Device Identification */}
                         <td>
-                          <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{dev.name}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{dev.name}</div>
+                          <div style={{ fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
                             <DeviceTypeBadge type={dev.device_type} />
                             {dev.is_newly_discovered && (
                               <span
@@ -895,7 +900,8 @@ export const Overview = () => {
                                   padding: '1px 5px',
                                   borderRadius: '3px',
                                   fontSize: '9.5px',
-                                  fontWeight: 700,
+                                  fontWeight: 600,
+                                  marginLeft: '4px',
                                 }}
                               >
                                 New Poll
@@ -905,7 +911,7 @@ export const Overview = () => {
                         </td>
 
                         {/* 2. IP Address */}
-                        <td className="mono" style={{ fontWeight: 600, color: 'var(--accent-primary)', whiteSpace: 'nowrap' }}>
+                        <td className="mono" style={{ fontWeight: 600, color: '#0284c7' }}>
                           {dev.ip_address}
                         </td>
 
@@ -913,20 +919,20 @@ export const Overview = () => {
                         <td>
                           {dev.mac_address ? (
                             <div>
-                              <div className="mono" style={{ fontSize: '11px', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                              <div className="mono" style={{ fontSize: '11px', color: '#0f172a' }}>
                                 {dev.mac_address}
                               </div>
                               {vendor && (
-                                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{vendor}</div>
+                                <div style={{ fontSize: '10px', color: '#64748b' }}>{vendor}</div>
                               )}
                             </div>
                           ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            <span style={{ color: '#94a3b8' }}>—</span>
                           )}
                         </td>
 
                         {/* 4. Classification */}
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td>
                           {dev.classification === 'managed' ? (
                             <span className="status-badge online" style={{ fontSize: '10px' }}>
                               <Server size={10} /> Managed Node
@@ -940,30 +946,30 @@ export const Overview = () => {
 
                         {/* 5. Department / Location */}
                         <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)' }}>
-                            <MapPin size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
+                            <MapPin size={11} style={{ color: '#94a3b8' }} />
                             <span>{dev.department_location}</span>
                           </div>
                           {dev.network_interface && (
-                            <span className="mono" style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
+                            <span className="mono" style={{ fontSize: '9.5px', color: '#64748b' }}>
                               {dev.network_interface}
                             </span>
                           )}
                         </td>
 
                         {/* 6. Inventory Match */}
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td>
                           {dev.inventory_match_status === 'matched' ? (
                             <span className="status-badge online" style={{ fontSize: '10px' }}>
                               <CheckCircle2 size={10} /> Matched
                             </span>
                           ) : (
-                            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Unmatched</span>
+                            <span style={{ fontSize: '10.5px', color: '#94a3b8' }}>Unmatched</span>
                           )}
                         </td>
 
                         {/* 7. Ping Reachability & Latency */}
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <StatusBadge status={dev.effective_ping_status} />
                             {isOnline && dev.ping_latency !== null && (
@@ -975,14 +981,14 @@ export const Overview = () => {
                         </td>
 
                         {/* 8. Last Probe Time */}
-                        <td className="mono" style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        <td style={{ fontSize: '10.5px', color: '#64748b' }}>
                           {dev.last_ping_at
                             ? formatIndianTime(dev.last_ping_at)
                             : 'Pending'}
                         </td>
 
                         {/* 9. ARP Observed Time */}
-                        <td className="mono" style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        <td style={{ fontSize: '10.5px', color: '#64748b' }}>
                           {dev.last_seen_at
                             ? formatIndianDate(dev.last_seen_at)
                             : '—'}
@@ -993,7 +999,7 @@ export const Overview = () => {
                           {dev.registered_device_id ? (
                             <button
                               className="btn btn-secondary btn-sm"
-                              style={{ padding: '2px 8px', fontSize: '10.5px' }}
+                              style={{ padding: '2px 7px', fontSize: '10.5px' }}
                               onClick={() => {
                                 const realDev = devices.find(d => d.id === dev.registered_device_id);
                                 if (realDev) setSelectedDevice(realDev);
@@ -1005,7 +1011,7 @@ export const Overview = () => {
                             <Link
                               to="/arp-discovery"
                               className="btn btn-secondary btn-sm"
-                              style={{ padding: '2px 8px', fontSize: '10.5px' }}
+                              style={{ padding: '2px 7px', fontSize: '10.5px' }}
                             >
                               Edit
                             </Link>
@@ -1070,8 +1076,8 @@ export const Overview = () => {
             </span>
           </div>
 
-          <div className="panel-body" style={{ padding: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
+          <div className="panel-body" style={{ padding: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
               {Object.entries(deptBreakdown).map(([dept, data]) => {
                 const isHealthy = data.offline === 0 && data.online > 0;
                 const hasIssues = data.offline > 0;
@@ -1096,49 +1102,45 @@ export const Overview = () => {
                     }}
                     className="dept-health-card"
                     style={{
-                      padding: '12px 14px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: `1px solid ${hasIssues ? '#fca5a5' : isHealthy ? '#a7f3d0' : 'var(--border-subtle)'}`,
-                      backgroundColor: hasIssues ? '#fff5f5' : isHealthy ? '#f0fdf4' : '#ffffff',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${hasIssues ? '#fca5a5' : isHealthy ? '#a7f3d0' : '#e2e8f0'}`,
+                      backgroundColor: hasIssues ? '#fff5f5' : isHealthy ? '#f0fdf4' : '#f8fafc',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '6px',
+                      gap: '4px',
                       cursor: 'pointer',
-                      boxShadow: 'var(--shadow-sm)',
-                      transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
                     }}
                     title={`Click to view devices from ${dept}`}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, fontSize: '12.5px', color: 'var(--text-main)' }}>{dept}</span>
+                      <span style={{ fontWeight: 600, fontSize: '12px', color: '#0f172a' }}>{dept}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span
                           className={`status-badge ${hasIssues ? 'offline' : isHealthy ? 'online' : 'unknown'}`}
-                          style={{ fontSize: '9.5px', padding: '1px 6px' }}
+                          style={{ fontSize: '9.5px', padding: '1px 5px' }}
                         >
                           {hasIssues ? `${data.offline} Down` : isHealthy ? 'All Up' : 'Standby'}
                         </span>
-                        <ChevronRight size={13} style={{ color: 'var(--text-muted)' }} />
+                        <ChevronRight size={13} style={{ color: '#94a3b8' }} />
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        <strong style={{ color: 'var(--text-secondary)' }}>{data.online}</strong> / {data.total} Online
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>
+                        {data.online} / {data.total} Online
                       </span>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: hasIssues ? '#dc2626' : '#059669' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: hasIssues ? '#dc2626' : '#059669' }}>
                         {pct}%
                       </span>
                     </div>
 
-                    <div style={{ width: '100%', height: '5px', backgroundColor: '#e2e8f0', borderRadius: '999px', overflow: 'hidden', marginTop: '4px' }}>
+                    <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', overflow: 'hidden', marginTop: '2px' }}>
                       <div
                         style={{
                           width: `${pct}%`,
                           height: '100%',
                           backgroundColor: hasIssues ? '#ef4444' : '#10b981',
-                          borderRadius: '999px',
-                          transition: 'width 0.6s ease',
                         }}
                       />
                     </div>
@@ -1158,23 +1160,23 @@ export const Overview = () => {
                 <Network size={14} style={{ color: '#0891b2' }} />
                 <span>Railway Subnet Architecture</span>
               </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Active Segments</span>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>Active Segments</span>
             </div>
-            <div className="panel-body" style={{ padding: '14px' }}>
+            <div className="panel-body" style={{ padding: '12px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {Object.entries(subnetBreakdown).map(([subnet, data]) => (
-                  <div key={subnet} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div key={subnet} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
                     <div>
-                      <div className="mono" style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                      <div className="mono" style={{ fontSize: '11.5px', fontWeight: 600, color: '#0284c7' }}>
                         {subnet}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{data.label}</div>
+                      <div style={{ fontSize: '10.5px', color: '#64748b' }}>{data.label}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: data.online > 0 ? '#059669' : '#dc2626' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: data.online > 0 ? '#059669' : '#dc2626' }}>
                         {data.online} / {data.total}
                       </span>
-                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginLeft: '4px' }}>active</span>
+                      <span style={{ fontSize: '10px', color: '#64748b', marginLeft: '4px' }}>active</span>
                     </div>
                   </div>
                 ))}
@@ -1186,12 +1188,12 @@ export const Overview = () => {
           <div className="panel">
             <div className="panel-header">
               <div className="panel-title">
-                <Zap size={14} style={{ color: 'var(--accent-primary)' }} />
+                <Zap size={14} style={{ color: '#0284c7' }} />
                 <span>Response-Time Trend (Real History)</span>
               </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Live Ping Samples</span>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>Live Ping Samples</span>
             </div>
-            <div className="panel-body" style={{ height: '180px', padding: '12px' }}>
+            <div className="panel-body" style={{ height: '180px', padding: '10px' }}>
               {chartData.length === 0 ? (
                 <EmptyState
                   title="No latency telemetry"
@@ -1200,17 +1202,16 @@ export const Overview = () => {
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="time" tick={{ fontSize: 9.5, fill: '#64748b' }} />
-                    <YAxis unit="ms" tick={{ fontSize: 9.5, fill: '#64748b' }} domain={[0, (dataMax) => Math.max(Number(dataMax) + 2, 5)]} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#64748b' }} />
+                    <YAxis unit="ms" tick={{ fontSize: 9, fill: '#64748b' }} domain={[0, (dataMax) => Math.max(Number(dataMax) + 2, 5)]} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: '#0f172a',
                         color: '#ffffff',
-                        borderRadius: '6px',
+                        borderRadius: '4px',
                         fontSize: '11px',
                         border: 'none',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                       }}
                       formatter={(val, name, item) => [
                         `${val} ms (${item.payload.device})`,
@@ -1223,7 +1224,7 @@ export const Overview = () => {
                       stroke="#0284c7"
                       strokeWidth={2}
                       dot={{ r: 3.5, fill: '#0284c7', stroke: '#ffffff', strokeWidth: 1.5 }}
-                      activeDot={{ r: 5 }}
+                      activeDot={{ r: 6 }}
                       name="Latency (ms)"
                       connectNulls={true}
                     />

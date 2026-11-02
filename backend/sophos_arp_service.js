@@ -50,6 +50,173 @@ let lastPollerRun = {
   summary: null
 };
 
+let pollerDbState = {
+  last_attempt_at: null,
+  last_success_at: null,
+  snapshot_created_at: null,
+  polling_status: 'idle',
+  last_error: null,
+  last_duration_ms: null,
+  last_snapshot_id: null,
+  total_entries: null,
+  entries_with_mac: null
+};
+
+/**
+ * Initializes poller status table and seeds the in-memory cache from database.
+ */
+async function initPollerStatus() {
+  try {
+    const { migratePollerStatus } = require('./migrate_sophos_poller_status');
+    await migratePollerStatus(pool);
+    const res = await pool.query('SELECT * FROM sophos_poller_status WHERE id = 1');
+    if (res.rows.length > 0) {
+      pollerDbState = { ...res.rows[0] };
+    }
+  } catch (err) {
+    console.error('[SophosPoller] Failed to initialize poller status:', err.message);
+  }
+}
+initPollerStatus();
+
+/**
+ * Records a new polling attempt (updates last_attempt_at).
+ */
+async function recordPollAttempt() {
+  try {
+    const now = new Date().toISOString();
+    pollerDbState.last_attempt_at = now;
+    pollerDbState.polling_status = 'in_progress';
+    await pool.query(
+      `UPDATE sophos_poller_status
+       SET last_attempt_at = NOW(),
+           polling_status = 'in_progress',
+           updated_at = NOW()
+       WHERE id = 1`
+    );
+  } catch (err) {
+    console.error('[SophosPoller] Failed to record poll attempt in DB:', err.message);
+  }
+}
+
+/**
+ * Records a polling failure (updates polling_status and last_error, keeps last_success_at & snapshot_created_at unchanged).
+ */
+async function recordPollFailure(errorMsg, durationMs) {
+  try {
+    pollerDbState.polling_status = 'failed';
+    pollerDbState.last_error = errorMsg;
+    pollerDbState.last_duration_ms = durationMs;
+    await pool.query(
+      `UPDATE sophos_poller_status
+       SET polling_status = 'failed',
+           last_error = $1,
+           last_duration_ms = $2,
+           updated_at = NOW()
+       WHERE id = 1`,
+      [errorMsg, durationMs]
+    );
+  } catch (err) {
+    console.error('[SophosPoller] Failed to record poll failure in DB:', err.message);
+  }
+}
+
+/**
+ * Records a successful extraction where data was identical (updates last_success_at, keeps snapshot_created_at unchanged).
+ */
+async function recordPollSuccessDuplicate(totalEntries, entriesWithMac, durationMs) {
+  try {
+    const now = new Date().toISOString();
+    pollerDbState.last_success_at = now;
+    pollerDbState.polling_status = 'success_duplicate';
+    pollerDbState.last_error = null;
+    pollerDbState.last_duration_ms = durationMs;
+    pollerDbState.total_entries = totalEntries;
+    pollerDbState.entries_with_mac = entriesWithMac;
+    await pool.query(
+      `UPDATE sophos_poller_status
+       SET last_success_at = NOW(),
+           polling_status = 'success_duplicate',
+           last_error = NULL,
+           last_duration_ms = $1,
+           total_entries = $2,
+           entries_with_mac = $3,
+           updated_at = NOW()
+       WHERE id = 1`,
+      [durationMs, totalEntries, entriesWithMac]
+    );
+  } catch (err) {
+    console.error('[SophosPoller] Failed to record duplicate success in DB:', err.message);
+  }
+}
+
+/**
+ * Records a successful extraction where a new distinct snapshot was saved (updates last_success_at and snapshot_created_at).
+ */
+async function recordPollSuccessNew(snapshotId, totalEntries, entriesWithMac, durationMs) {
+  try {
+    const now = new Date().toISOString();
+    pollerDbState.last_success_at = now;
+    pollerDbState.snapshot_created_at = now;
+    pollerDbState.last_snapshot_id = snapshotId;
+    pollerDbState.polling_status = 'success_new';
+    pollerDbState.last_error = null;
+    pollerDbState.last_duration_ms = durationMs;
+    pollerDbState.total_entries = totalEntries;
+    pollerDbState.entries_with_mac = entriesWithMac;
+    await pool.query(
+      `UPDATE sophos_poller_status
+       SET last_success_at = NOW(),
+           snapshot_created_at = NOW(),
+           last_snapshot_id = $1,
+           polling_status = 'success_new',
+           last_error = NULL,
+           last_duration_ms = $2,
+           total_entries = $3,
+           entries_with_mac = $4,
+           updated_at = NOW()
+       WHERE id = 1`,
+      [snapshotId, durationMs, totalEntries, entriesWithMac]
+    );
+  } catch (err) {
+    console.error('[SophosPoller] Failed to record new snapshot success in DB:', err.message);
+  }
+}
+
+/**
+ * Asynchronously reads the latest persisted poller status from the database.
+ */
+async function getPersistedPollerStatus() {
+  try {
+    const res = await pool.query('SELECT * FROM sophos_poller_status WHERE id = 1');
+    if (res.rows.length > 0) {
+      pollerDbState = { ...res.rows[0] };
+    }
+  } catch (err) {
+    console.error('[SophosPoller] Error reading persisted poller status:', err.message);
+  }
+  return {
+    isRunning: Boolean(arpPollingTimer),
+    isInProgress: isArpPollingInProgress,
+    config: {
+      enabled: CONFIG.enabled,
+      intervalMs: CONFIG.intervalMs,
+      intervalSeconds: CONFIG.intervalMs / 1000,
+      sophosUrl: CONFIG.sophosUrl
+    },
+    lastRun: lastPollerRun,
+    last_attempt_at: pollerDbState.last_attempt_at,
+    last_success_at: pollerDbState.last_success_at,
+    snapshot_created_at: pollerDbState.snapshot_created_at,
+    polling_status: isArpPollingInProgress ? 'in_progress' : pollerDbState.polling_status,
+    last_error: pollerDbState.last_error,
+    last_duration_ms: pollerDbState.last_duration_ms,
+    last_snapshot_id: pollerDbState.last_snapshot_id,
+    total_entries: pollerDbState.total_entries,
+    entries_with_mac: pollerDbState.entries_with_mac
+  };
+}
+
 const CONFIG = {
   enabled: process.env.SOPHOS_ARP_POLL_ENABLED !== 'false',
   intervalMs: Number(process.env.SOPHOS_ARP_POLL_INTERVAL_MS) || 300000, // 5 minutes default
@@ -434,7 +601,7 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
  * @returns {Promise<object>} Cycle outcome
  */
 async function runArpPollingCycle(options = {}) {
-  console.log("inside runArpPollingCycle")
+  console.log("inside runArpPollingCycle");
   if (isArpPollingInProgress) {
     console.log('[SophosPoller] Previous ARP polling cycle still running; skipping cycle.');
     return { skipped: true, reason: 'Already in progress' };
@@ -442,6 +609,9 @@ async function runArpPollingCycle(options = {}) {
 
   isArpPollingInProgress = true;
   const startTime = Date.now();
+  if (!options.dryRun) {
+    await recordPollAttempt();
+  }
 
   try {
     const latestSummaryBefore = await getLatestSnapshotSummary();
@@ -452,11 +622,15 @@ async function runArpPollingCycle(options = {}) {
     try {
       entries = await extractFromSophosBrowser(options);
     } catch (extractErr) {
+      const durationMs = Date.now() - startTime;
       console.error(`[SophosPoller] Extraction failed: ${extractErr.message}. Preserving last successful snapshot (#${lastSuccessfulSnapId || 'none'}).`);
+      if (!options.dryRun) {
+        await recordPollFailure(extractErr.message, durationMs);
+      }
       lastPollerRun = {
         timestamp: new Date().toISOString(),
         success: false,
-        durationMs: Date.now() - startTime,
+        durationMs,
         snapshotId: lastSuccessfulSnapId,
         error: extractErr.message,
         summary: null
@@ -465,7 +639,7 @@ async function runArpPollingCycle(options = {}) {
         success: false,
         error: extractErr.message,
         preservedSnapshotId: lastSuccessfulSnapId,
-        durationMs: Date.now() - startTime
+        durationMs
       };
     }
 
@@ -473,11 +647,15 @@ async function runArpPollingCycle(options = {}) {
     const validation = validateExtractedSnapshot(entries);
     if (!validation.valid) {
       const errMsg = validation.errors.join('; ');
+      const durationMs = Date.now() - startTime;
       console.error(`[SophosPoller] Validation failed: ${errMsg}. Preserving last successful snapshot (#${lastSuccessfulSnapId || 'none'}).`);
+      if (!options.dryRun) {
+        await recordPollFailure(errMsg, durationMs);
+      }
       lastPollerRun = {
         timestamp: new Date().toISOString(),
         success: false,
-        durationMs: Date.now() - startTime,
+        durationMs,
         snapshotId: lastSuccessfulSnapId,
         error: errMsg,
         summary: null
@@ -486,7 +664,7 @@ async function runArpPollingCycle(options = {}) {
         success: false,
         error: errMsg,
         preservedSnapshotId: lastSuccessfulSnapId,
-        durationMs: Date.now() - startTime
+        durationMs
       };
     }
 
@@ -495,6 +673,10 @@ async function runArpPollingCycle(options = {}) {
     if (isDuplicate) {
       const durationMs = Date.now() - startTime;
       console.log(`[SophosPoller] Extracted snapshot is identical to latest snapshot (#${lastSuccessfulSnapId}); duplicate import skipped | ${durationMs}ms`);
+      const validMacCount = entries.filter(e => e.mac && e.mac.length > 0 && e.mac !== '00:00:00:00:00:00').length;
+      if (!options.dryRun) {
+        await recordPollSuccessDuplicate(entries.length, validMacCount, durationMs);
+      }
       lastPollerRun = {
         timestamp: new Date().toISOString(),
         success: true,
@@ -547,6 +729,10 @@ async function runArpPollingCycle(options = {}) {
       `[SophosPoller] Cycle completed: Snapshot #${importResult.snapshotId} (${importResult.totalEntries} entries, ${importResult.entriesWithMac} with MAC) | ${newMacCount} new MACs | ${changedMappingCount} IP-MAC changes | ${unobservedCount} unobserved | ${durationMs}ms`
     );
 
+    if (!options.dryRun) {
+      await recordPollSuccessNew(importResult.snapshotId, importResult.totalEntries, importResult.entriesWithMac, durationMs);
+    }
+
     lastPollerRun = {
       timestamp: new Date().toISOString(),
       success: true,
@@ -573,6 +759,9 @@ async function runArpPollingCycle(options = {}) {
   } catch (err) {
     const durationMs = Date.now() - startTime;
     console.error(`[SophosPoller] Cycle error after ${durationMs}ms:`, err.message);
+    if (!options.dryRun) {
+      await recordPollFailure(err.message, durationMs);
+    }
     lastPollerRun = {
       timestamp: new Date().toISOString(),
       success: false,
@@ -638,7 +827,16 @@ function getArpPollerStatus() {
       intervalSeconds: CONFIG.intervalMs / 1000,
       sophosUrl: CONFIG.sophosUrl
     },
-    lastRun: lastPollerRun
+    lastRun: lastPollerRun,
+    last_attempt_at: pollerDbState.last_attempt_at,
+    last_success_at: pollerDbState.last_success_at,
+    snapshot_created_at: pollerDbState.snapshot_created_at,
+    polling_status: isArpPollingInProgress ? 'in_progress' : pollerDbState.polling_status,
+    last_error: pollerDbState.last_error,
+    last_duration_ms: pollerDbState.last_duration_ms,
+    last_snapshot_id: pollerDbState.last_snapshot_id,
+    total_entries: pollerDbState.total_entries,
+    entries_with_mac: pollerDbState.entries_with_mac
   };
 }
 
@@ -647,6 +845,11 @@ module.exports = {
   startArpPollingScheduler,
   stopArpPollingScheduler,
   getArpPollerStatus,
+  getPersistedPollerStatus,
+  recordPollAttempt,
+  recordPollFailure,
+  recordPollSuccessDuplicate,
+  recordPollSuccessNew,
   validateExtractedSnapshot,
   compareSnapshots,
   extractFromSophosBrowser,
