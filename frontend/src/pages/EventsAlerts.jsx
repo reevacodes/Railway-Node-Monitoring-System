@@ -330,8 +330,8 @@ export const EventsAlerts = () => {
                           {status === 'offline'
                             ? 'Ping Timed Out (0% packet reply)'
                             : isDegraded
-                            ? `High Latency: ${latency_ms}ms`
-                            : 'Unconfirmed reachability'}
+                              ? `High Latency: ${latency_ms}ms`
+                              : 'Unconfirmed reachability'}
                         </td>
                         <td className="mono" style={{ fontSize: '10.5px' }}>
                           {last_checked ? new Date(last_checked).toLocaleTimeString() : 'Never'}
