@@ -266,6 +266,7 @@ export const NetworkTopology = () => {
         const q = searchQuery.toLowerCase();
         const match =
           (d.name || '').toLowerCase().includes(q) ||
+          (d.contact_person || '').toLowerCase().includes(q) ||
           (d.ip_address || '').toLowerCase().includes(q) ||
           (d.mac_address || '').toLowerCase().includes(q) ||
           (d.room || '').toLowerCase().includes(q) ||
@@ -1297,10 +1298,12 @@ export const NetworkTopology = () => {
                             {subnetStr.split('/')[0].split('.').slice(2).join('.')}/24
                           </text>
 
+                          <title>{`${dev.name}${dev.contact_person ? `\nUser / Custodian: ${dev.contact_person}` : ''}\nIP: ${dev.ip_address || 'Unbound'}\nLocation: ${locationStr}`}</title>
+
                           {/* Device Name */}
                           <text
                             x="0"
-                            y="-10"
+                            y={dev.contact_person ? "-13" : "-10"}
                             fontSize="11.5"
                             fill="#0f172a"
                             fontWeight="700"
@@ -1309,10 +1312,24 @@ export const NetworkTopology = () => {
                             {dev.name.length > 22 ? dev.name.substring(0, 20) + '...' : dev.name}
                           </text>
 
+                          {/* Person Name (under device name) */}
+                          {dev.contact_person && (
+                            <text
+                              x="0"
+                              y="0"
+                              fontSize="9.5"
+                              fill="#1e293b"
+                              fontWeight="600"
+                              textAnchor="middle"
+                            >
+                              👤 {dev.contact_person.length > 22 ? dev.contact_person.substring(0, 20) + '...' : dev.contact_person}
+                            </text>
+                          )}
+
                           {/* IP Address */}
                           <text
                             x="0"
-                            y="6"
+                            y={dev.contact_person ? "12" : "6"}
                             fontSize="10"
                             fill="#0284c7"
                             textAnchor="middle"
@@ -1325,7 +1342,7 @@ export const NetworkTopology = () => {
                           {/* Location Tag */}
                           <rect
                             x="-88"
-                            y="15"
+                            y={dev.contact_person ? "19" : "15"}
                             width="176"
                             height="18"
                             rx="3"
@@ -1335,7 +1352,7 @@ export const NetworkTopology = () => {
                           />
                           <text
                             x="0"
-                            y="27"
+                            y={dev.contact_person ? "31" : "27"}
                             fontSize="8.5"
                             fill={isVerifiedLoc ? '#065f46' : '#64748b'}
                             textAnchor="middle"
@@ -1348,7 +1365,7 @@ export const NetworkTopology = () => {
                           {st.latency_ms !== null && st.latency_ms !== undefined && (
                             <text
                               x="0"
-                              y="41"
+                              y={dev.contact_person ? "43" : "41"}
                               fontSize="8.5"
                               fill="#059669"
                               textAnchor="middle"
@@ -1631,6 +1648,18 @@ export const NetworkTopology = () => {
                                                   <span style={{ fontWeight: 700, fontSize: '11.5px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {device.name}
                                                   </span>
+                                                  {device.contact_person ? (
+                                                    <div style={{ fontSize: '10.5px', color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+                                                      <span style={{ color: '#6366f1' }}>👤</span>
+                                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {device.contact_person}
+                                                      </span>
+                                                    </div>
+                                                  ) : (
+                                                    <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>
+                                                      Unassigned
+                                                    </div>
+                                                  )}
                                                   <span
                                                     style={{
                                                       width: '6px',

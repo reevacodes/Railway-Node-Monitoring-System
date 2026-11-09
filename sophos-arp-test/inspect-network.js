@@ -411,7 +411,21 @@ async function extractArpPages(page) {
         }
 
         // Advance once and wait for the pagination label to change.
-        await next.click();
+        try {
+            await next.click({ timeout: 5000 });
+        } catch {
+            await page.evaluate(() => {
+                document.querySelectorAll('#wfx-player-popup, #wfx-frame-popup, [data-wfx-element]').forEach(el => el.remove());
+            }).catch(() => {});
+            try {
+                await next.click({ force: true, timeout: 5000 });
+            } catch {
+                await page.evaluate(sel => {
+                    const el = document.querySelector(sel);
+                    if (el) el.click();
+                }, SELECTORS.nextPage);
+            }
+        }
 
         try {
             await page.waitForFunction(
@@ -481,6 +495,30 @@ async function main() {
         // Use a fresh page to avoid inspecting a stale about:blank tab.
         const page = await context.newPage();
         page.setDefaultTimeout(15000);
+
+        // Block Whatfix and non-essential third-party walkthrough/widget scripts
+        await page.route('**/*whatfix*/**', route => route.abort());
+        await page.route('**/*cdn.whatfix.com*/**', route => route.abort());
+
+        // Inject CSS to suppress Whatfix walkthrough popups or modal overlays
+        await page.addInitScript(() => {
+            try {
+                const style = document.createElement('style');
+                style.innerHTML = `
+                    #wfx-player-popup, #wfx-frame-popup, [data-wfx-element], .WFEMDN, div[id*="wfx"] {
+                        display: none !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
+                        z-index: -9999 !important;
+                    }
+                `;
+                if (document.head) {
+                    document.head.appendChild(style);
+                } else {
+                    document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+                }
+            } catch {}
+        });
 
         console.log("Navigating to Sophos firewall...");
 

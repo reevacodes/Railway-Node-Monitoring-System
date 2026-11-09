@@ -8,6 +8,7 @@ import { LocationBadge, CompactLocationView } from '../components/common/Locatio
 import EmptyState from '../components/common/EmptyState';
 import DeviceFormModal from '../components/devices/DeviceFormModal';
 import DeviceQuickDrawer from '../components/devices/DeviceQuickDrawer';
+import DeviceIdentifier from '../components/common/DeviceIdentifier';
 import { formatIndianDate } from '../utils/formatters';
 import {
   Plus,
@@ -635,32 +636,12 @@ export const DeviceInventory = () => {
                           #{dev.id}
                         </td>
                         <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 600 }}>{dev.name}</span>
-                            {isRecent && (
-                              <span
-                                style={{
-                                  fontSize: '9px',
-                                  padding: '1px 5px',
-                                  backgroundColor: '#ede9fe',
-                                  color: '#6d28d9',
-                                  borderRadius: '3px',
-                                  fontWeight: 600,
-                                }}
-                                title="Commissioned in the last 72 hours"
-                              >
-                                NEW
-                              </span>
-                            )}
-                          </div>
-                          {(dev.contact_person || dev.contact_phone) && (
-                            <div style={{ fontSize: '10.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                              <span>{dev.contact_person || 'Custodian'}</span>
-                              {dev.contact_phone && (
-                                <span className="mono" style={{ color: '#0284c7' }}>• {dev.contact_phone}</span>
-                              )}
-                            </div>
-                          )}
+                          <DeviceIdentifier
+                            name={dev.name}
+                            contactPerson={dev.contact_person}
+                            contactPhone={dev.contact_phone}
+                            isNew={isRecent}
+                          />
                         </td>
                         <td>
                           <DeviceTypeBadge type={dev.device_type} />

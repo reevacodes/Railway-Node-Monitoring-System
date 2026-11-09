@@ -142,6 +142,19 @@ export const DeviceDetails = () => {
           </Link>
           <div>
             <h1>{device.name}</h1>
+            {device.contact_person ? (
+              <div style={{ fontSize: '13px', color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px', marginBottom: '2px' }}>
+                <span style={{ color: '#6366f1' }}>👤</span>
+                <span>Assigned Staff / Officer: <strong>{device.contact_person}</strong></span>
+                {device.contact_phone && (
+                  <span className="mono" style={{ color: '#0284c7', fontWeight: 400 }}>• Tel: {device.contact_phone}</span>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px', marginBottom: '2px' }}>
+                Unassigned Contact
+              </div>
+            )}
             <div className="page-subtitle">
               Node ID #{device.id} • Registered {new Date(device.created_at).toLocaleDateString()}
             </div>
@@ -284,6 +297,16 @@ export const DeviceDetails = () => {
                   ) : (
                     <span style={{ color: '#94a3b8' }}>Unrecorded rack</span>
                   )}
+                </span>
+
+                <span className="kv-key">Assigned Person:</span>
+                <span className="kv-value" style={{ fontWeight: device.contact_person ? 600 : 'normal' }}>
+                  {device.contact_person || <span style={{ color: '#94a3b8' }}>Unrecorded</span>}
+                </span>
+
+                <span className="kv-key">Contact Phone:</span>
+                <span className="kv-value mono" style={{ color: device.contact_phone ? '#0284c7' : 'inherit' }}>
+                  {device.contact_phone || <span style={{ color: '#94a3b8' }}>Unrecorded</span>}
                 </span>
               </div>
             </div>

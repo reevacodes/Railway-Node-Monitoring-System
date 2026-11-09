@@ -5,6 +5,7 @@ import ArpStateBadge from '../components/common/ArpStateBadge';
 import StatusBadge from '../components/common/StatusBadge';
 import EmptyState from '../components/common/EmptyState';
 import Modal from '../components/common/Modal';
+import DeviceIdentifier from '../components/common/DeviceIdentifier';
 import { formatIndianDateTime, formatIndianDate, formatIndianTime } from '../utils/formatters';
 import {
   Radio,
@@ -1122,11 +1123,12 @@ export const ArpDiscovery = () => {
                             {/* 1. Device Identity & Location */}
                             <td>
                               <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{ fontWeight: 600, color: displayName ? '#0f172a' : '#94a3b8', fontSize: '12px' }}>
-                                    {displayName || <em>Unidentified Device</em>}
-                                  </span>
-                                  {device.custom_name && (
+                                <DeviceIdentifier
+                                  name={displayName || 'Unidentified Device'}
+                                  contactPerson={device.registered_contact_person}
+                                  contactPhone={device.registered_contact_phone}
+                                  unassignedText="Unassigned"
+                                  extraBadge={device.custom_name ? (
                                     <span
                                       style={{
                                         fontSize: '9.5px',
@@ -1139,8 +1141,8 @@ export const ArpDiscovery = () => {
                                     >
                                       Custom
                                     </span>
-                                  )}
-                                </div>
+                                  ) : null}
+                                />
                                 {locationDisplay ? (
                                   <div style={{ fontSize: '10.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
                                     <MapPin size={10} style={{ flexShrink: 0 }} /> {locationDisplay}
@@ -1956,7 +1958,13 @@ export const ArpDiscovery = () => {
                                   </span>
                                 )}
                               </td>
-                              <td style={{ fontWeight: 600 }}>{entry.inventory_device_name || '—'}</td>
+                              <td>
+                                <DeviceIdentifier
+                                  name={entry.inventory_device_name || entry.registered_device_name || '—'}
+                                  contactPerson={entry.registered_contact_person}
+                                  contactPhone={entry.registered_contact_phone}
+                                />
+                              </td>
                               <td style={{ fontSize: '11px', color: '#64748b' }}>{entry.inventory_location || '—'}</td>
                             </tr>
                           ))}
@@ -2782,9 +2790,12 @@ export const ArpDiscovery = () => {
                             {/* Registered Device */}
                             <td>
                               {row.registered_device_name ? (
-                                <span style={{ fontWeight: 600, color: '#166534', fontSize: '11px' }}>
-                                  ✓ {row.registered_device_name}
-                                </span>
+                                <DeviceIdentifier
+                                  name={`✓ ${row.registered_device_name}`}
+                                  contactPerson={row.registered_contact_person}
+                                  contactPhone={row.registered_contact_phone}
+                                  nameStyle={{ color: '#166534', fontSize: '11px' }}
+                                />
                               ) : (
                                 <span style={{ color: '#94a3b8', fontSize: '11px' }}>—</span>
                               )}
@@ -3054,7 +3065,15 @@ export const ArpDiscovery = () => {
                   <div>
                     <span style={{ color: '#64748b' }}>Monitored Registry Node: </span>
                     {inspectingEntry.registered_device_name ? (
-                      <strong style={{ color: '#15803d' }}>{inspectingEntry.registered_device_name}</strong>
+                      <div>
+                        <strong style={{ color: '#15803d' }}>{inspectingEntry.registered_device_name}</strong>
+                        {inspectingEntry.registered_contact_person && (
+                          <div style={{ fontSize: '11px', color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                            <span style={{ color: '#6366f1' }}>👤</span>
+                            <span>{inspectingEntry.registered_contact_person}</span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <span style={{ color: '#94a3b8' }}>Unregistered Node</span>
                     )}

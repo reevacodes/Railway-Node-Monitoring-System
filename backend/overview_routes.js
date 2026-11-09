@@ -253,6 +253,8 @@ router.get('/api/overview/unified-devices', async (req, res) => {
           LOWER(REPLACE(REPLACE(COALESCE(d.mac_address, dd.mac_address, ''), ':', ''), '-', '')) AS normalized_mac,
           d.device_type AS device_type,
           COALESCE(d.room, d.building, 'Railway Complex') AS department_location,
+          d.contact_person AS contact_person,
+          d.contact_phone AS contact_phone,
           CASE
             WHEN dd.matched_inventory_id IS NOT NULL THEN 'matched'
             ELSE 'unmatched'
@@ -274,9 +276,19 @@ router.get('/api/overview/unified-devices', async (req, res) => {
             ELSE false
           END AS is_newly_discovered
         FROM devices d
-        LEFT JOIN discovered_devices dd ON dd.registered_device_id = d.id
+        LEFT JOIN (
+          SELECT DISTINCT ON (registered_device_id) *
+          FROM discovered_devices
+          WHERE registered_device_id IS NOT NULL
+          ORDER BY registered_device_id, last_seen_at DESC NULLS LAST, id DESC
+        ) dd ON dd.registered_device_id = d.id
         LEFT JOIN latest_reg_status sh ON sh.device_id = d.id
-        LEFT JOIN mac_inventory inv ON inv.device_id = d.id
+        LEFT JOIN (
+          SELECT DISTINCT ON (device_id) *
+          FROM mac_inventory
+          WHERE device_id IS NOT NULL
+          ORDER BY device_id, id DESC
+        ) inv ON inv.device_id = d.id
 
         UNION ALL
 
@@ -293,6 +305,8 @@ router.get('/api/overview/unified-devices', async (req, res) => {
           dd.normalized_mac AS normalized_mac,
           COALESCE(dd.device_type, inv.device_type, 'Workstation') AS device_type,
           COALESCE(dd.building_location, dd.department, inv.department_location, 'DRM Complex') AS department_location,
+          d_mac.contact_person AS contact_person,
+          d_mac.contact_phone AS contact_phone,
           CASE
             WHEN dd.matched_inventory_id IS NOT NULL THEN 'matched'
             ELSE 'unmatched'
@@ -315,6 +329,10 @@ router.get('/api/overview/unified-devices', async (req, res) => {
           END AS is_newly_discovered
         FROM discovered_devices dd
         LEFT JOIN mac_inventory inv ON inv.id = dd.matched_inventory_id
+        LEFT JOIN devices d_mac ON (
+          (dd.normalized_mac IS NOT NULL AND d_mac.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(d_mac.mac_address, '[^a-fA-F0-9]', '', 'g')) = dd.normalized_mac)
+          OR (inv.device_id IS NOT NULL AND d_mac.id = inv.device_id)
+        )
         WHERE dd.registered_device_id IS NULL
       )
     `;
@@ -332,7 +350,8 @@ router.get('/api/overview/unified-devices', async (req, res) => {
         LOWER(ip_address) LIKE $${pIdx} OR
         LOWER(COALESCE(mac_address, '')) LIKE $${pIdx} OR
         LOWER(COALESCE(department_location, '')) LIKE $${pIdx} OR
-        LOWER(COALESCE(device_type, '')) LIKE $${pIdx}
+        LOWER(COALESCE(device_type, '')) LIKE ${pIdx} OR
+        LOWER(COALESCE(contact_person, '')) LIKE ${pIdx}
       )`);
     }
 

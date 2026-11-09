@@ -5,6 +5,7 @@ import LatencyIndicator from '../components/common/LatencyIndicator';
 import { CompactLocationView } from '../components/common/LocationBadge';
 import DeviceQuickDrawer from '../components/devices/DeviceQuickDrawer';
 import EmptyState from '../components/common/EmptyState';
+import DeviceIdentifier from '../components/common/DeviceIdentifier';
 import {
   History,
   Search,
@@ -55,6 +56,8 @@ export const AvailabilityHistory = () => {
           !search ||
           evt.deviceName.toLowerCase().includes(search.toLowerCase()) ||
           evt.ipAddress.toLowerCase().includes(search.toLowerCase()) ||
+          (evt.contact_person && evt.contact_person.toLowerCase().includes(search.toLowerCase())) ||
+          (evt.device?.contact_person && evt.device.contact_person.toLowerCase().includes(search.toLowerCase())) ||
           (evt.device?.building && evt.device.building.toLowerCase().includes(search.toLowerCase())) ||
           (evt.device?.room && evt.device.room.toLowerCase().includes(search.toLowerCase())) ||
           (evt.device?.rack && evt.device.rack.toLowerCase().includes(search.toLowerCase()));
@@ -298,7 +301,7 @@ export const AvailabilityHistory = () => {
               <option value="ALL">All Nodes</option>
               {devices.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.name} ({d.ip_address})
+                  {d.name}{d.contact_person ? ` [👤 ${d.contact_person}]` : ''} ({d.ip_address})
                 </option>
               ))}
             </select>
@@ -383,7 +386,13 @@ export const AvailabilityHistory = () => {
                       <td className="mono" style={{ fontSize: '11px' }}>
                         {new Date(evt.checked_at).toLocaleString()}
                       </td>
-                      <td style={{ fontWeight: 600 }}>{evt.deviceName}</td>
+                      <td>
+                        <DeviceIdentifier
+                          name={evt.deviceName}
+                          contactPerson={evt.contact_person || evt.device?.contact_person}
+                          contactPhone={evt.contact_phone || evt.device?.contact_phone}
+                        />
+                      </td>
                       <td className="mono">{evt.ipAddress}</td>
                       {/* Physical Location */}
                       <td>

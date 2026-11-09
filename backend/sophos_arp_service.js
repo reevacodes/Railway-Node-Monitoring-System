@@ -454,6 +454,64 @@ async function extractFromSophosBrowser(options = {}) {
     const page = context.pages()[0] || await context.newPage();
     page.setDefaultTimeout(15000);
 
+    // Block Whatfix and non-essential third-party walkthrough/widget scripts from loading
+    await page.route('**/*whatfix*/**', route => route.abort());
+    await page.route('**/*cdn.whatfix.com*/**', route => route.abort());
+
+    // Inject CSS to suppress and neutralize any Whatfix walkthrough popups or modal overlays
+    await page.addInitScript(() => {
+      try {
+        const style = document.createElement('style');
+        style.innerHTML = `
+          #wfx-player-popup, #wfx-frame-popup, [data-wfx-element], .WFEMDN, div[id*="wfx"] {
+            display: none !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            z-index: -9999 !important;
+          }
+        `;
+        if (document.head) {
+          document.head.appendChild(style);
+        } else {
+          document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+        }
+      } catch {}
+    });
+
+    // Helper: remove overlay/dialog elements that might intercept pointer events
+    const sweepOverlays = async () => {
+      try {
+        await page.evaluate(() => {
+          const overlays = document.querySelectorAll(
+            '#wfx-player-popup, #wfx-frame-popup, [data-wfx-element], div[id*="wfx"], .WFEMDN'
+          );
+          overlays.forEach(el => el.remove());
+        });
+      } catch {}
+    };
+
+    // Helper: resilient click that sweeps overlays and falls back to force or DOM click
+    const safeClick = async (locator, fallbackSelector = null) => {
+      await sweepOverlays();
+      try {
+        await locator.click({ timeout: 5000 });
+      } catch {
+        await sweepOverlays();
+        try {
+          await locator.click({ force: true, timeout: 5000 });
+        } catch (forceErr) {
+          if (fallbackSelector) {
+            await page.evaluate((sel) => {
+              const el = document.querySelector(sel);
+              if (el) el.click();
+            }, fallbackSelector);
+          } else {
+            throw forceErr;
+          }
+        }
+      }
+    };
+
     await page.goto(targetUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 30000
@@ -462,7 +520,7 @@ async function extractFromSophosBrowser(options = {}) {
     // Accept disclaimer if present
     const acceptButton = page.locator('input[type="button"][value="I accept"]');
     if (await acceptButton.isVisible().catch(() => false)) {
-      await acceptButton.click();
+      await safeClick(acceptButton);
       await page.waitForLoadState('domcontentloaded').catch(() => { });
       await page.waitForTimeout(500);
     }
@@ -475,7 +533,7 @@ async function extractFromSophosBrowser(options = {}) {
     if (await usernameField.isVisible().catch(() => false)) {
       await usernameField.fill(username);
       await passwordField.fill(password);
-      await loginButton.click();
+      await safeClick(loginButton);
 
       await Promise.race([
         acceptButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => null),
@@ -483,7 +541,7 @@ async function extractFromSophosBrowser(options = {}) {
       ]);
 
       if (await acceptButton.isVisible().catch(() => false)) {
-        await acceptButton.click();
+        await safeClick(acceptButton);
         await page.waitForLoadState('domcontentloaded').catch(() => { });
       }
     }
@@ -496,7 +554,7 @@ async function extractFromSophosBrowser(options = {}) {
     await network.waitFor({ state: 'visible', timeout: 10000 });
     const className = (await network.getAttribute('class')) || '';
     if (!className.includes('active-nav')) {
-      await network.click();
+      await safeClick(network, SELECTORS.network);
       await page.waitForTimeout(500);
     }
 
@@ -504,13 +562,13 @@ async function extractFromSophosBrowser(options = {}) {
     const neighbors = page.locator('#network-neighbors');
     const moreTabs = page.locator(SELECTORS.moreTabs);
     if (await neighbors.isVisible().catch(() => false)) {
-      await neighbors.click();
+      await safeClick(neighbors, SELECTORS.neighbors);
     } else {
       await moreTabs.waitFor({ state: 'visible', timeout: 10000 });
-      await moreTabs.click();
+      await safeClick(moreTabs, SELECTORS.moreTabs);
       await page.waitForTimeout(300);
       await neighbors.waitFor({ state: 'visible', timeout: 5000 });
-      await neighbors.click();
+      await safeClick(neighbors, SELECTORS.neighbors);
     }
 
     await page.waitForTimeout(500);
@@ -580,7 +638,7 @@ async function extractFromSophosBrowser(options = {}) {
         break;
       }
 
-      await next.click();
+      await safeClick(next, SELECTORS.nextPage);
       await page.waitForFunction(
         ({ selector, previous }) => {
           const el = document.querySelector(selector);
@@ -787,8 +845,15 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
 
   // 1. New MACs in target that were not in base
   const newMacsRes = await pool.query(`
-    SELECT DISTINCT d.normalized_mac, d.mac_address, d.ip_address, d.interface, d.arp_state, d.discovered_at
+    SELECT DISTINCT d.normalized_mac, d.mac_address, d.ip_address, d.interface, d.arp_state, d.discovered_at,
+           inv.device_name AS inventory_device_name, inv.department_location AS inventory_location,
+           reg.name AS registered_device_name, reg.contact_person AS registered_contact_person, reg.contact_phone AS registered_contact_phone
     FROM arp_discoveries d
+    LEFT JOIN mac_inventory inv ON inv.id = d.matched_inventory_id
+    LEFT JOIN devices reg ON (
+      (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(reg.mac_address, '[^a-fA-F0-9]', '', 'g')) = d.normalized_mac)
+      OR (inv.device_id IS NOT NULL AND reg.id = inv.device_id)
+    )
     WHERE d.snapshot_id = $1 AND d.has_mac = TRUE AND d.normalized_mac IS NOT NULL
       AND d.normalized_mac NOT IN (
         SELECT b.normalized_mac FROM arp_discoveries b
@@ -799,8 +864,15 @@ async function compareSnapshots(baseSnapshotId, targetSnapshotId) {
 
   // 2. Devices in base that were unobserved in target (with explainable note)
   const unobservedRawRes = await pool.query(`
-    SELECT DISTINCT b.normalized_mac, b.mac_address, b.ip_address, b.interface, b.arp_state, b.discovered_at
+    SELECT DISTINCT b.normalized_mac, b.mac_address, b.ip_address, b.interface, b.arp_state, b.discovered_at,
+           inv.device_name AS inventory_device_name, inv.department_location AS inventory_location,
+           reg.name AS registered_device_name, reg.contact_person AS registered_contact_person, reg.contact_phone AS registered_contact_phone
     FROM arp_discoveries b
+    LEFT JOIN mac_inventory inv ON inv.id = b.matched_inventory_id
+    LEFT JOIN devices reg ON (
+      (b.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(reg.mac_address, '[^a-fA-F0-9]', '', 'g')) = b.normalized_mac)
+      OR (inv.device_id IS NOT NULL AND reg.id = inv.device_id)
+    )
     WHERE b.snapshot_id = $1 AND b.has_mac = TRUE AND b.normalized_mac IS NOT NULL
       AND b.normalized_mac NOT IN (
         SELECT t.normalized_mac FROM arp_discoveries t

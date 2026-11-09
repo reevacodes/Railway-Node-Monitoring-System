@@ -62,7 +62,7 @@ export const DeviceQuickDrawer = ({ device, isOpen, onClose, onEditDevice = null
   };
 
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} title={`Node Inspection — ${device.name}`} width={520}>
+    <Drawer isOpen={isOpen} onClose={onClose} title={`Node Inspection — ${device.name}${device.contact_person ? ` • 👤 ${device.contact_person}` : ''}`} width={520}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Top Reachability Status Banner */}
         <div
@@ -108,6 +108,37 @@ export const DeviceQuickDrawer = ({ device, isOpen, onClose, onEditDevice = null
               <RefreshCw size={12} className={isProbing ? 'spin-icon' : ''} />
               {isProbing ? 'Probing...' : 'Probe'}
             </button>
+          </div>
+        </div>
+
+        {/* Assigned Officer / Custodian Banner */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 14px',
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '4px',
+            fontSize: '12px',
+          }}
+        >
+          <User size={15} style={{ color: device.contact_person ? '#6366f1' : '#94a3b8' }} />
+          <div>
+            <span style={{ color: '#64748b' }}>Assigned Person: </span>
+            {device.contact_person ? (
+              <>
+                <strong style={{ color: '#0f172a' }}>{device.contact_person}</strong>
+                {device.contact_phone && (
+                  <span className="mono" style={{ marginLeft: '8px', color: '#0284c7' }}>
+                    (Tel: {device.contact_phone})
+                  </span>
+                )}
+              </>
+            ) : (
+              <span style={{ color: '#94a3b8' }}>Unassigned</span>
+            )}
           </div>
         </div>
 

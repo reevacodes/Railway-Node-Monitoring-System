@@ -62,7 +62,8 @@ router.get('/api/discovered-devices', async (req, res) => {
         LOWER(COALESCE(dd.department, '')) LIKE $${pIdx} OR
         LOWER(COALESCE(dd.building_location, '')) LIKE $${pIdx} OR
         LOWER(COALESCE(inv.device_name, '')) LIKE $${pIdx} OR
-        LOWER(COALESCE(dev.name, '')) LIKE $${pIdx}
+        LOWER(COALESCE(dev.name, '')) LIKE ${pIdx} OR
+        LOWER(COALESCE(dev.contact_person, '')) LIKE ${pIdx}
       )`;
     }
 
@@ -144,6 +145,8 @@ router.get('/api/discovered-devices', async (req, res) => {
         inv.department_location AS inventory_location,
         inv.device_type AS inventory_device_type,
         dev.name AS registered_device_name,
+        dev.contact_person AS registered_contact_person,
+        dev.contact_phone AS registered_contact_phone,
         dev.building AS registered_building,
         dev.room AS registered_room,
         CASE

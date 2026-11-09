@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useNetwork } from '../context/NetworkContext';
-import api from '../services/api';
+import api, { isCancel } from '../services/api';
 import StatusBadge from '../components/common/StatusBadge';
 import DeviceTypeBadge from '../components/common/DeviceTypeBadge';
 import LatencyIndicator from '../components/common/LatencyIndicator';
@@ -9,6 +9,7 @@ import { CompactLocationView } from '../components/common/LocationBadge';
 import EmptyState from '../components/common/EmptyState';
 import Modal from '../components/common/Modal';
 import DeviceQuickDrawer from '../components/devices/DeviceQuickDrawer';
+import DeviceIdentifier from '../components/common/DeviceIdentifier';
 import { formatIndianDateTime, formatIndianDate, formatIndianTime } from '../utils/formatters';
 import {
   Server,
@@ -101,8 +102,23 @@ export const Overview = () => {
   const [unifiedFilter, setUnifiedFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE' | 'UNKNOWN' | 'MANAGED' | 'UNMANAGED' | 'INVENTORY_MATCHED' | 'NEWLY_DISCOVERED'
   const [unifiedSearch, setUnifiedSearch] = useState('');
   const [debouncedUnifiedSearch, setDebouncedUnifiedSearch] = useState('');
-  const [isUnifiedLoading, setIsUnifiedLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const [devicesError, setDevicesError] = useState(null);
+  const [lastDevicesUpdated, setLastDevicesUpdated] = useState(null);
+
+  // Backward compatibility alias for indicators
+  const isUnifiedLoading = isInitialLoading;
+
+  // Persistent tracking refs to prevent race conditions, duplicate polling, and false abort errors
+  const hasLoadedInitialDevices = useRef(false);
+  const hasLoadedInitialSummary = useRef(false);
+  const devicesInFlightRef = useRef(false);
+  const summaryInFlightRef = useRef(false);
+  const devicesRequestIdRef = useRef(0);
+  const summaryRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const fetchDevicesLatestRef = useRef(null);
 
   // Helper to render metric values with loading spinners and robust zero display
   const renderMetricValue = (val, isLoading) => {
@@ -119,69 +135,180 @@ export const Overview = () => {
   };
 
   // ----------------------------------------------------
-  // Debounce search input by 300ms and reset to page 1
+  // Debounce search input by 350ms and reset to page 1
   // ----------------------------------------------------
   useEffect(() => {
+    const trimmed = unifiedSearch.trim();
+    if (trimmed === debouncedUnifiedSearch) return;
     const timer = setTimeout(() => {
-      setDebouncedUnifiedSearch(unifiedSearch);
+      setDebouncedUnifiedSearch(trimmed);
       setUnifiedPage(1);
-    }, 300);
+    }, 350);
     return () => clearTimeout(timer);
-  }, [unifiedSearch]);
+  }, [unifiedSearch, debouncedUnifiedSearch]);
+
+  // Immediately clear search and reset to page 1
+  const handleClearSearch = () => {
+    setUnifiedSearch('');
+    setDebouncedUnifiedSearch('');
+    setUnifiedPage(1);
+  };
 
   // ----------------------------------------------------
   // Fetch Unified Overview Summary
   // ----------------------------------------------------
-  const fetchUnifiedSummary = useCallback(async () => {
-    setIsSummaryLoading(true);
-    setSummaryError(null);
+  const fetchUnifiedSummary = useCallback(async (isSilent = false) => {
+    // If background silent refresh and request is already in-flight, skip to avoid overlap
+    if (summaryInFlightRef.current && isSilent) {
+      return;
+    }
+    summaryInFlightRef.current = true;
+    const reqId = ++summaryRequestIdRef.current;
+
+    if (!hasLoadedInitialSummary.current && !isSilent) {
+      setIsSummaryLoading(true);
+      setSummaryError(null);
+    }
+
     try {
       const data = await api.getUnifiedOverviewSummary({ freshness_minutes: 10 });
+      if (!isMountedRef.current || reqId !== summaryRequestIdRef.current) return;
+
       setUnifiedSummary(data);
+      hasLoadedInitialSummary.current = true;
+      setSummaryError(null);
     } catch (err) {
-      console.error('Failed to load unified summary:', err);
-      setSummaryError(err.response?.data?.error || err.message || 'Failed to connect to summary API');
+      if (isCancel(err) || !isMountedRef.current || reqId !== summaryRequestIdRef.current) {
+        return; // Safely ignore cancelled / superseded requests
+      }
+      if (hasLoadedInitialSummary.current) {
+        // Retain previous summary metrics during background refresh failure
+        console.warn('Background refresh of unified summary failed:', err);
+      } else {
+        console.error('Failed to load unified summary:', err);
+        setSummaryError(err.response?.data?.error || err.message || 'Failed to connect to summary API');
+      }
     } finally {
-      setIsSummaryLoading(false);
+      if (isMountedRef.current && reqId === summaryRequestIdRef.current) {
+        summaryInFlightRef.current = false;
+        setIsSummaryLoading(false);
+      }
     }
   }, []);
 
   // ----------------------------------------------------
   // Fetch Unified Devices List (Deduplicated)
   // ----------------------------------------------------
-  const fetchUnifiedDevices = useCallback(async () => {
-    setIsUnifiedLoading(true);
-    setDevicesError(null);
+  const fetchUnifiedDevices = useCallback(async ({
+    page = unifiedPage,
+    filter = unifiedFilter,
+    search = debouncedUnifiedSearch,
+    isSilent = false,
+    force = false,
+  } = {}) => {
+    // If background silent refresh and request is already in-flight, skip to avoid overlap
+    if (devicesInFlightRef.current && isSilent && !force) {
+      return;
+    }
+
+    devicesInFlightRef.current = true;
+    const reqId = ++devicesRequestIdRef.current;
+
+    const isInitial = !hasLoadedInitialDevices.current;
+    if (isInitial) {
+      setIsInitialLoading(true);
+      setDevicesError(null);
+    } else {
+      setIsBackgroundRefreshing(true);
+    }
+
     try {
       const data = await api.getUnifiedOverviewDevices({
-        page: unifiedPage,
+        page,
         limit: 20,
-        filter: unifiedFilter,
-        search: debouncedUnifiedSearch || undefined,
+        filter,
+        search: search ? search.trim() : undefined,
         freshness_minutes: 10,
       });
+
+      if (!isMountedRef.current || reqId !== devicesRequestIdRef.current) {
+        return; // Stale or superseded response: discard safely
+      }
+
       setUnifiedDevices(data.items || []);
       setUnifiedTotal(data.total ?? 0);
       setUnifiedTotalPages(data.totalPages ?? 1);
+      setDevicesError(null);
+      hasLoadedInitialDevices.current = true;
+      setLastDevicesUpdated(new Date());
     } catch (err) {
-      console.error('Failed to load unified devices:', err);
-      setDevicesError(err.response?.data?.error || err.message || 'Failed to connect to devices API');
+      if (isCancel(err) || !isMountedRef.current || reqId !== devicesRequestIdRef.current) {
+        // Request cancelled or superseded - DO NOT classify as error!
+        return;
+      }
+
+      if (hasLoadedInitialDevices.current) {
+        // Background refresh failure: retain previous table rows, do NOT replace table
+        console.warn('Background refresh of unified devices failed:', err);
+      } else {
+        // Genuine initial load failure: show error screen with retry
+        console.error('Failed to load unified devices:', err);
+        setDevicesError(err.response?.data?.error || err.message || 'Failed to connect to devices API');
+      }
     } finally {
-      setIsUnifiedLoading(false);
+      if (isMountedRef.current && reqId === devicesRequestIdRef.current) {
+        devicesInFlightRef.current = false;
+        setIsInitialLoading(false);
+        setIsBackgroundRefreshing(false);
+      }
     }
   }, [unifiedPage, unifiedFilter, debouncedUnifiedSearch]);
 
-  // Initial load & Polling
+  // Keep fetchDevicesLatestRef pointing to current parameters
   useEffect(() => {
-    fetchUnifiedSummary();
-    fetchUnifiedDevices();
+    fetchDevicesLatestRef.current = fetchUnifiedDevices;
+  }, [fetchUnifiedDevices]);
+
+  // Trigger devices fetch when query parameters (page, filter, search) change
+  useEffect(() => {
+    fetchUnifiedDevices({
+      page: unifiedPage,
+      filter: unifiedFilter,
+      search: debouncedUnifiedSearch,
+      isSilent: false,
+    });
+  }, [unifiedPage, unifiedFilter, debouncedUnifiedSearch]);
+
+  // Dedicated background polling cycle (every 15 seconds)
+  useEffect(() => {
+    isMountedRef.current = true;
+    fetchUnifiedSummary(false);
 
     const interval = setInterval(() => {
-      fetchUnifiedSummary();
-      fetchUnifiedDevices();
+      if (!isMountedRef.current) return;
+      fetchUnifiedSummary(true);
+      fetchDevicesLatestRef.current?.({ isSilent: true });
     }, 15000);
-    return () => clearInterval(interval);
-  }, [fetchUnifiedSummary, fetchUnifiedDevices]);
+
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(interval);
+      api.cancelRequest('unified-devices');
+      api.cancelRequest('unified-summary');
+    };
+  }, [fetchUnifiedSummary]);
+
+  // Manual table refresh handler
+  const handleManualTableRefresh = () => {
+    fetchUnifiedDevices({ force: true, isSilent: false });
+  };
+
+  // Global header refresh handler
+  const handleGlobalRefresh = () => {
+    fetchUnifiedSummary(false);
+    fetchUnifiedDevices({ force: true, isSilent: false });
+    showNotification?.('Refreshed operational telemetry.', 'info');
+  };
 
   // Handle card click to filter unified table
   const handleCardFilterClick = (filterPreset) => {
@@ -275,14 +402,10 @@ export const Overview = () => {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => {
-              fetchUnifiedSummary();
-              fetchUnifiedDevices();
-              showNotification?.('Refreshed operational telemetry.', 'info');
-            }}
+            onClick={handleGlobalRefresh}
             title="Refresh overview metrics"
           >
-            <RefreshCw size={13} className={isSummaryLoading || isUnifiedLoading ? 'spin' : ''} />
+            <RefreshCw size={13} className={isSummaryLoading || isBackgroundRefreshing || isInitialLoading ? 'spin' : ''} />
             <span>Refresh</span>
           </button>
           <Link to="/devices" className="btn btn-secondary btn-sm">
@@ -782,12 +905,18 @@ export const Overview = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {lastDevicesUpdated && (
+              <span style={{ fontSize: '11px', color: '#64748b' }}>
+                Updated {lastDevicesUpdated.toLocaleTimeString()}
+              </span>
+            )}
             <button
               className="btn btn-secondary btn-sm"
               style={{ fontSize: '11px', padding: '3px 8px' }}
-              onClick={fetchUnifiedDevices}
+              onClick={handleManualTableRefresh}
+              title="Refresh Unified Devices Table"
             >
-              <RefreshCw size={11} className={isUnifiedLoading ? 'spin' : ''} /> Refresh Table
+              <RefreshCw size={11} className={isBackgroundRefreshing || isInitialLoading ? 'spin' : ''} /> Refresh Table
             </button>
           </div>
         </div>
@@ -810,7 +939,7 @@ export const Overview = () => {
               />
               {unifiedSearch && (
                 <button
-                  onClick={() => setUnifiedSearch('')}
+                  onClick={handleClearSearch}
                   style={{
                     position: 'absolute',
                     right: '8px',
@@ -829,19 +958,26 @@ export const Overview = () => {
             </div>
           </div>
 
-          <div style={{ fontSize: '11px', color: '#64748b' }}>
-            Showing page <strong>{unifiedPage}</strong> of <strong>{unifiedTotalPages}</strong> ({unifiedTotal} matching assets)
+          <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {isBackgroundRefreshing && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#0284c7', fontSize: '10.5px' }}>
+                <RefreshCw size={10} className="spin" /> Updating...
+              </span>
+            )}
+            <span>
+              Showing page <strong>{unifiedPage}</strong> of <strong>{unifiedTotalPages}</strong> ({unifiedTotal} matching assets)
+            </span>
           </div>
         </div>
 
         {/* Unified Table Body */}
         <div className="panel-body" style={{ padding: '0' }}>
-          {isUnifiedLoading ? (
+          {isInitialLoading && !hasLoadedInitialDevices.current ? (
             <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
               <RefreshCw size={24} className="spin" style={{ margin: '0 auto 8px' }} />
               <div>Loading unified device telemetry...</div>
             </div>
-          ) : devicesError ? (
+          ) : devicesError && unifiedDevices.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: '#b91c1c' }}>
               <AlertTriangle size={28} style={{ margin: '0 auto 8px', color: '#dc2626' }} />
               <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>
@@ -852,7 +988,7 @@ export const Overview = () => {
               </div>
               <button
                 className="btn btn-secondary btn-sm"
-                onClick={fetchUnifiedDevices}
+                onClick={handleManualTableRefresh}
               >
                 <RefreshCw size={12} /> Retry Loading Devices
               </button>
@@ -889,7 +1025,11 @@ export const Overview = () => {
                       <tr key={dev.unique_key} className={isOffline ? 'row-offline' : ''}>
                         {/* 1. Device Identification */}
                         <td>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{dev.name}</div>
+                          <DeviceIdentifier
+                            name={dev.name}
+                            contactPerson={dev.contact_person}
+                            contactPhone={dev.contact_phone}
+                          />
                           <div style={{ fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
                             <DeviceTypeBadge type={dev.device_type} />
                             {dev.is_newly_discovered && (
@@ -1300,7 +1440,13 @@ export const Overview = () => {
                       const st = deviceStatuses[dev.id] || { status: item.status || 'unknown' };
                       return (
                         <tr key={dev.id} className={st.status === 'offline' ? 'row-offline' : ''}>
-                          <td style={{ fontWeight: 600 }}>{dev.name}</td>
+                          <td>
+                            <DeviceIdentifier
+                              name={dev.name}
+                              contactPerson={dev.contact_person}
+                              contactPhone={dev.contact_phone}
+                            />
+                          </td>
                           <td className="mono">{dev.ip_address}</td>
                           <td>
                             <CompactLocationView device={dev} />
@@ -1360,8 +1506,12 @@ export const Overview = () => {
                     return (
                       <tr key={dev.id}>
                         <td>
-                          <div style={{ fontWeight: 600 }}>{dev.name}</div>
-                          <div className="mono" style={{ fontSize: '10px', color: '#0284c7' }}>{dev.ip_address}</div>
+                          <DeviceIdentifier
+                            name={dev.name}
+                            contactPerson={dev.contact_person}
+                            contactPhone={dev.contact_phone}
+                          />
+                          <div className="mono" style={{ fontSize: '10px', color: '#0284c7', marginTop: '1px' }}>{dev.ip_address}</div>
                         </td>
                         <td>
                           <div style={{ fontWeight: 500 }}>{dev.room || dev.building || 'DRM Office'}</div>
@@ -1404,6 +1554,7 @@ export const Overview = () => {
           const q = deptSearch.toLowerCase().trim();
           displayedDevices = displayedDevices.filter((d) =>
             (d.name || '').toLowerCase().includes(q) ||
+            (d.contact_person || '').toLowerCase().includes(q) ||
             (d.ip_address || '').toLowerCase().includes(q) ||
             (d.device_type || '').toLowerCase().includes(q) ||
             (d.mac_address || '').toLowerCase().includes(q)
@@ -1530,7 +1681,11 @@ export const Overview = () => {
                     return (
                       <tr key={dev.id}>
                         <td>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{dev.name}</div>
+                          <DeviceIdentifier
+                            name={dev.name}
+                            contactPerson={dev.contact_person}
+                            contactPhone={dev.contact_phone}
+                          />
                           <div style={{ marginTop: '2px' }}>
                             <DeviceTypeBadge type={dev.device_type} />
                           </div>

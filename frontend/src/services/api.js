@@ -18,15 +18,31 @@ class ApiService {
   // Cancel any ongoing request for a specific key
   cancelRequest(key) {
     if (this.abortControllers.has(key)) {
-      this.abortControllers.get(key).abort();
+      try {
+        this.abortControllers.get(key).abort();
+      } catch (err) {
+        console.warn(`Error aborting request for key ${key}:`, err);
+      }
       this.abortControllers.delete(key);
     }
   }
 
+  isCancel(err) {
+    return Boolean(
+      err && (
+        err.name === 'AbortError' ||
+        err.isCanceled === true ||
+        err.message === 'Request cancelled' ||
+        err.code === 'ERR_CANCELED'
+      )
+    );
+  }
+
   async request(path, options = {}, key = null) {
+    let controller = null;
     if (key) {
       this.cancelRequest(key);
-      const controller = new AbortController();
+      controller = new AbortController();
       this.abortControllers.set(key, controller);
       options.signal = controller.signal;
     }
@@ -39,7 +55,8 @@ class ApiService {
 
     try {
       const response = await fetch(url, { ...options, headers });
-      if (key) {
+      // Only clean up if this request is still the active one for this key
+      if (key && controller && this.abortControllers.get(key) === controller) {
         this.abortControllers.delete(key);
       }
 
@@ -58,11 +75,15 @@ class ApiService {
 
       return await response.json();
     } catch (err) {
-      if (key) {
+      // Only clean up if this request is still the active one for this key
+      if (key && controller && this.abortControllers.get(key) === controller) {
         this.abortControllers.delete(key);
       }
-      if (err.name === 'AbortError') {
-        throw new Error('Request cancelled');
+      if (err.name === 'AbortError' || err.message === 'Request cancelled') {
+        const cancelErr = new Error('Request cancelled');
+        cancelErr.name = 'AbortError';
+        cancelErr.isCanceled = true;
+        throw cancelErr;
       }
       throw err;
     }
@@ -374,5 +395,6 @@ class ApiService {
 }
 
 export const api = new ApiService();
+export const isCancel = (err) => api.isCancel(err);
 export default api;
 

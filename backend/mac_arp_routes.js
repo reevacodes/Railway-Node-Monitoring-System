@@ -80,12 +80,17 @@ router.get('/api/mac-inventory', async (req, res) => {
         dev.rack AS registered_rack,
         dev.port_number AS registered_port,
         dev.location_verification,
+        dev.contact_person,
+        dev.contact_phone,
         p.ping_status,
         p.ping_latency,
         p.ping_checked_at
       FROM mac_inventory inv
       LEFT JOIN latest_arp arp ON arp.normalized_mac = inv.normalized_mac
-      LEFT JOIN devices dev ON dev.id = inv.device_id
+      LEFT JOIN devices dev ON (
+        (inv.device_id IS NOT NULL AND dev.id = inv.device_id)
+        OR (inv.normalized_mac IS NOT NULL AND dev.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(dev.mac_address, '[^a-fA-F0-9]', '', 'g')) = inv.normalized_mac)
+      )
       LEFT JOIN latest_device_status p ON p.device_id = dev.id
       ORDER BY inv.id ASC
     `;
@@ -104,6 +109,7 @@ router.get('/api/mac-inventory', async (req, res) => {
     if (cleanSearch) {
       items = items.filter(i =>
         (i.device_name && i.device_name.toLowerCase().includes(cleanSearch)) ||
+        (i.contact_person && i.contact_person.toLowerCase().includes(cleanSearch)) ||
         (i.mac_address && i.mac_address.toLowerCase().includes(cleanSearch)) ||
         (i.normalized_mac && i.normalized_mac.toLowerCase().includes(cleanSearch)) ||
         (i.department_location && i.department_location.toLowerCase().includes(cleanSearch)) ||
@@ -203,6 +209,19 @@ router.get('/api/mac-inventory/:id', async (req, res) => {
     if (item.device_id) {
       const devRes = await pool.query('SELECT * FROM devices WHERE id = $1', [item.device_id]);
       if (devRes.rows.length > 0) linkedDevice = devRes.rows[0];
+    }
+    if (!linkedDevice && item.normalized_mac) {
+      const devRes = await pool.query(
+        "SELECT * FROM devices WHERE mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(mac_address, '[^a-fA-F0-9]', '', 'g')) = $1 LIMIT 1",
+        [item.normalized_mac]
+      );
+      if (devRes.rows.length > 0) linkedDevice = devRes.rows[0];
+    }
+    if (linkedDevice) {
+      item.contact_person = linkedDevice.contact_person;
+      item.contact_phone = linkedDevice.contact_phone;
+      item.linked_device_name = linkedDevice.name;
+      item.registered_ip = linkedDevice.ip_address;
     }
 
     res.json({
@@ -499,7 +518,7 @@ router.get('/api/arp/snapshots/:id/raw-export', async (req, res) => {
 // 5e. GET /api/arp/snapshots/:id/verified-export
 // Export validated snapshot entries with full audit classifications & reasons
 // ---------------------------------------------------------------------
-router.get('/api/arp/snapshots/:id/verified-export', async (req, res) => {
+async function handleVerifiedExport(req, res) {
   try {
     let snapshotId;
     if (req.params.id === 'latest') {
@@ -535,6 +554,8 @@ router.get('/api/arp/snapshots/:id/verified-export', async (req, res) => {
         reg.id AS registered_device_id,
         reg.name AS registered_device_name,
         reg.device_type AS registered_device_type,
+        reg.contact_person AS registered_contact_person,
+        reg.contact_phone AS registered_contact_phone,
         p.status AS ping_status,
         p.latency_ms AS ping_latency,
         p.checked_at AS ping_checked_at,
@@ -542,8 +563,8 @@ router.get('/api/arp/snapshots/:id/verified-export', async (req, res) => {
        FROM arp_discoveries d
        LEFT JOIN mac_inventory inv ON inv.id = d.matched_inventory_id
        LEFT JOIN devices reg ON (
-         (reg.ip_address IS NOT NULL AND reg.ip_address = d.ip_address)
-         OR (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND UPPER(REPLACE(REPLACE(reg.mac_address, ':', ''), '-', '')) = d.normalized_mac)
+         (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(reg.mac_address, '[^a-fA-F0-9]', '', 'g')) = d.normalized_mac)
+         OR (inv.device_id IS NOT NULL AND reg.id = inv.device_id)
        )
        LEFT JOIN LATERAL (
          SELECT status, latency_ms, checked_at
@@ -636,7 +657,8 @@ router.get('/api/arp/snapshots/:id/verified-export', async (req, res) => {
     console.error('Verified export failed:', err.message);
     res.status(500).json({ error: 'Could not export verified snapshot' });
   }
-});
+}
+router.get('/api/arp/snapshots/:id/verified-export', handleVerifiedExport);
 
 // ---------------------------------------------------------------------
 // 5f. GET /api/arp/snapshots/compare/export
@@ -698,11 +720,7 @@ router.get('/api/arp/snapshots/compare/export', async (req, res) => {
 // ---------------------------------------------------------------------
 // 5g. GET /api/arp/snapshots/:id/export (Legacy compatibility)
 // ---------------------------------------------------------------------
-router.get('/api/arp/snapshots/:id/export', async (req, res) => {
-  // Delegate to verified-export
-  req.url = req.url.replace('/export', '/verified-export');
-  return router.handle(req, res);
-});
+router.get('/api/arp/snapshots/:id/export', handleVerifiedExport);
 
 // ---------------------------------------------------------------------
 // 6. POST /api/arp/snapshots/import
@@ -830,6 +848,8 @@ router.get('/api/arp/discoveries', async (req, res) => {
         reg.id AS registered_device_id,
         reg.name AS registered_device_name,
         reg.device_type AS registered_device_type,
+        reg.contact_person AS registered_contact_person,
+        reg.contact_phone AS registered_contact_phone,
         p.status AS ping_status,
         p.latency_ms AS ping_latency,
         p.checked_at AS ping_checked_at,
@@ -838,8 +858,8 @@ router.get('/api/arp/discoveries', async (req, res) => {
       JOIN arp_snapshots s ON s.id = d.snapshot_id
       LEFT JOIN mac_inventory inv ON inv.id = d.matched_inventory_id
       LEFT JOIN devices reg ON (
-        (reg.ip_address IS NOT NULL AND reg.ip_address = d.ip_address)
-        OR (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND UPPER(REPLACE(REPLACE(reg.mac_address, ':', ''), '-', '')) = d.normalized_mac)
+        (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(reg.mac_address, '[^a-fA-F0-9]', '', 'g')) = d.normalized_mac)
+        OR (inv.device_id IS NOT NULL AND reg.id = inv.device_id)
       )
       LEFT JOIN LATERAL (
         SELECT status, latency_ms, checked_at
@@ -871,6 +891,7 @@ router.get('/api/arp/discoveries', async (req, res) => {
         (i.interface && i.interface.toLowerCase().includes(cleanSearch)) ||
         (i.inventory_device_name && i.inventory_device_name.toLowerCase().includes(cleanSearch)) ||
         (i.registered_device_name && i.registered_device_name.toLowerCase().includes(cleanSearch)) ||
+        (i.registered_contact_person && i.registered_contact_person.toLowerCase().includes(cleanSearch)) ||
         (i.inventory_location && i.inventory_location.toLowerCase().includes(cleanSearch))
       );
     }

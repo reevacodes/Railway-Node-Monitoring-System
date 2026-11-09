@@ -248,6 +248,8 @@ export const NetworkProvider = ({ children }) => {
         deviceName: dev?.name || `Device #${devId}`,
         deviceType: dev?.device_type || 'Unknown',
         ipAddress: dev?.ip_address || '—',
+        contact_person: dev?.contact_person || h.contact_person || null,
+        contact_phone: dev?.contact_phone || h.contact_phone || null,
         device: dev || null,
       }));
     }).sort((a, b) => new Date(b.checked_at) - new Date(a.checked_at));

@@ -512,11 +512,13 @@ app.get('/devices/:id/history', async (req, res) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 50, 200);
         const result = await pool.query(
-            `SELECT id, device_id, status, checked_at, latency_ms
-       FROM status_history
-       WHERE device_id = $1
-       ORDER BY checked_at DESC, id DESC
-       LIMIT $2`,
+            `SELECT sh.id, sh.device_id, sh.status, sh.checked_at, sh.latency_ms,
+                    d.name AS device_name, d.device_type, d.ip_address, d.contact_person, d.contact_phone
+             FROM status_history sh
+             LEFT JOIN devices d ON d.id = sh.device_id
+             WHERE sh.device_id = $1
+             ORDER BY sh.checked_at DESC, sh.id DESC
+             LIMIT $2`,
             [deviceId, limit]
         );
 
@@ -538,7 +540,8 @@ app.get('/events/recent', async (req, res) => {
         const limit = Math.min(Number(req.query.limit) || 150, 500);
         const result = await pool.query(
             `SELECT sh.id, sh.device_id, sh.status, sh.checked_at, sh.latency_ms,
-                    d.name AS device_name, d.device_type, d.ip_address, d.building, d.room
+                    d.name AS device_name, d.device_type, d.ip_address, d.building, d.room,
+                    d.contact_person, d.contact_phone
              FROM status_history sh
              JOIN devices d ON d.id = sh.device_id
              ORDER BY sh.checked_at DESC, sh.id DESC
@@ -555,6 +558,8 @@ app.get('/events/recent', async (req, res) => {
             deviceName: row.device_name,
             deviceType: row.device_type || 'Unknown',
             ipAddress: row.ip_address || '—',
+            contact_person: row.contact_person,
+            contact_phone: row.contact_phone,
             device: {
                 id: row.device_id,
                 name: row.device_name,
@@ -562,6 +567,8 @@ app.get('/events/recent', async (req, res) => {
                 ip_address: row.ip_address,
                 building: row.building,
                 room: row.room,
+                contact_person: row.contact_person,
+                contact_phone: row.contact_phone,
             },
         }));
 

@@ -5,6 +5,7 @@ import DeviceTypeBadge from '../components/common/DeviceTypeBadge';
 import { LocationBadge, CompactLocationView } from '../components/common/LocationBadge';
 import DeviceQuickDrawer from '../components/devices/DeviceQuickDrawer';
 import EmptyState from '../components/common/EmptyState';
+import DeviceIdentifier from '../components/common/DeviceIdentifier';
 import {
   AlertTriangle,
   AlertOctagon,
@@ -53,6 +54,7 @@ export const EventsAlerts = () => {
       const matchesSearch =
         !q ||
         device.name.toLowerCase().includes(q) ||
+        (device.contact_person && device.contact_person.toLowerCase().includes(q)) ||
         device.ip_address.toLowerCase().includes(q) ||
         (device.building && device.building.toLowerCase().includes(q)) ||
         (device.room && device.room.toLowerCase().includes(q)) ||
@@ -307,7 +309,13 @@ export const EventsAlerts = () => {
                             </span>
                           )}
                         </td>
-                        <td style={{ fontWeight: 600 }}>{device.name}</td>
+                        <td>
+                          <DeviceIdentifier
+                            name={device.name}
+                            contactPerson={device.contact_person}
+                            contactPhone={device.contact_phone}
+                          />
+                        </td>
                         <td className="mono" style={{ color: '#0284c7' }}>
                           {device.ip_address}
                         </td>
@@ -413,7 +421,13 @@ export const EventsAlerts = () => {
                       <td className="mono" style={{ fontSize: '11px' }}>
                         {new Date(evt.checked_at).toLocaleString()}
                       </td>
-                      <td style={{ fontWeight: 600 }}>{evt.deviceName}</td>
+                      <td>
+                        <DeviceIdentifier
+                          name={evt.deviceName}
+                          contactPerson={evt.contact_person || evt.device?.contact_person}
+                          contactPhone={evt.contact_phone || evt.device?.contact_phone}
+                        />
+                      </td>
                       <td className="mono">{evt.ipAddress}</td>
                       {/* Physical Location */}
                       <td>

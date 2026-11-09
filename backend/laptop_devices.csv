@@ -1,0 +1,59 @@
+id,name,ip_address,mac_address,device_type,notes,building,floor,room,rack,rack_position,port_number,parent_device_id,parent_device_name,location_notes,location_verification,location_verified_at
+1,Demo Router 01,192.168.1.10,AA:BB:CC:DD:EE:01,Router,Simulated device for learning,DRM Office,Ground Floor,Demo Room 1,Rack 01,U24,GigE 0/0/1,,Core Gateway 01,Main fiber entry demarcation point; key access required.,unverified,
+3,Platform 1 Edge Switch 02,192.168.10.25,70-69-79-11-22-33,Managed Switch,Access switch for platform passenger displays,DRM Office,Ground Floor,Demo Room 2,Wall Cabinet 01,U04,Uplink Port 28,1,Demo Router 01,Key located in Station Master key box,unverified,
+4,HOR Cell PC (Voltriq),192.168.40.97,00:D0:0D:25:70:60,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Voltriq,DRM Office Complex,,HOR Cell,,,,,,Site: Jammu Tawi (JAT) | Location: HOR Cell,verified,2026-10-21 23:48:54.916+05:30
+5,Engg. W&W PC (Voltriq),192.168.41.88,00:D0:0D:25:BA:24,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Voltriq,DRM Office Complex,,Engg. W&W,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. W&W,verified,2026-10-21 23:49:12.568+05:30
+6,Engg. W&W PC (Voltriq),192.168.40.109,00:D0:0D:25:F0:12,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Voltriq,DRM Office Complex,,Engg. W&W,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. W&W,verified,2026-10-21 23:49:21.673+05:30
+7,Engg. Drawing PC (Voltriq),192.168.40.230,00:D0:0D:25:F0:D2,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Voltriq,DRM Office Complex,,Engg. Drawing,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. Drawing,verified,2026-10-21 23:49:24.337+05:30
+8,Engg. W&W PC (Voltriq),192.168.41.81,00:D0:0D:25:F1:11,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Voltriq,DRM Office Complex,,Engg. W&W,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. W&W,verified,2026-10-21 23:49:25.816+05:30
+9,Engg. W&W PC (Voltriq),192.168.40.123,00:D0:0D:25:F2:2C,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Voltriq,DRM Office Complex,,Engg. W&W,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. W&W,verified,2026-10-21 23:49:26.792+05:30
+10,CMI Office PC (Acer),192.168.40.46,00:E0:4C:0A:EE:4F,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Acer,DRM Office Complex,,CMI Office,,,,,,Site: Jammu Tawi (JAT) | Location: CMI Office,verified,2026-10-21 23:49:30.531+05:30
+11,Engg. W&W PC (Plektek),192.168.41.66,04:7C:16:13:23:50,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Plektek,DRM Office Complex,,Engg. W&W,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. W&W,verified,2026-10-21 23:49:31.548+05:30
+12,Sr. DEN-II Cabin PC (Frontech),192.168.40.34,34:5A:60:E7:27:37,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Frontech,DRM Office Complex,,Sr. DEN-II Cabin,,,,,,Site: Jammu Tawi (JAT) | Location: Sr. DEN-II Cabin,verified,2026-10-21 23:49:32.419+05:30
+13,Sr. DSTE Office PC (Acer),192.168.41.55,44:37:E6:47:D1:C8,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Acer,DRM Office Complex,,Sr. DSTE Office,,,,,,Site: Jammu Tawi (JAT) | Location: Sr. DSTE Office,verified,2026-10-21 23:49:33.567+05:30
+14,ADRM Cabin PC (HP),192.168.40.8,5C:60:BA:A6:D8:10,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: HP,DRM Office Complex,,ADRM Cabin,,,,,,Site: Jammu Tawi (JAT) | Location: ADRM Cabin,verified,2026-10-21 23:49:38.552+05:30
+15,DRM Office PC (HP),192.168.40.222,64:4E:D7:9F:AF:7B,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: HP,DRM Office Complex,,DRM Office,,,,,,Site: Jammu Tawi (JAT) | Location: DRM Office,verified,2026-10-21 23:49:38.621+05:30
+16,Engg. Planning PC (Acer),192.168.40.122,8C:32:23:37:C3:00,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Acer,DRM Office Complex,,Engg. Planning,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. Planning,verified,2026-10-21 23:49:41.914+05:30
+17,DRM Office PC (Acer),192.168.40.15,8C:32:23:37:C4:23,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Acer,DRM Office Complex,,DRM Office,,,,,,Site: Jammu Tawi (JAT) | Location: DRM Office,verified,2026-10-21 23:49:47.783+05:30
+18,Sr. DSTE Office PC (Cynix),192.168.40.138,A4:0C:66:24:B8:B8,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Cynix,DRM Office Complex,,Sr. DSTE Office,,,,,,Site: Jammu Tawi (JAT) | Location: Sr. DSTE Office,verified,2026-10-21 23:49:49.063+05:30
+19,IT Room PC (HP),192.168.40.160,C4:00:AD:9F:20:98,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: HP,DRM Office Complex,,IT Room,,,,,,Site: Jammu Tawi (JAT) | Location: IT Room,verified,2026-10-21 23:49:50.706+05:30
+20,Engg. Drawing PC (LG),192.168.40.42,D8:5E:D3:2B:19:FD,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: LG,DRM Office Complex,,Engg. Drawing,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. Drawing,verified,2026-10-21 23:49:45.054+05:30
+21,Engg. W&W PC (Dell),192.168.41.25,D8:9E:F3:86:F7:91,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Dell,DRM Office Complex,,Engg. W&W,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. W&W,verified,2026-10-21 23:49:52.869+05:30
+22,Sr. DEN-Co Cabin PC (Acer),192.168.40.30,D8:BB:C1:3B:C5:A9,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: Acer,DRM Office Complex,,Sr. DEN-Co Cabin,,,,,,Site: Jammu Tawi (JAT) | Location: Sr. DEN-Co Cabin,verified,2026-10-21 23:49:59.128+05:30
+23,Engg. Planning PC (RDP),192.168.40.191,E0:73:E7:19:E8:36,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: RDP,DRM Office Complex,,Engg. Planning,,,,,,Site: Jammu Tawi (JAT) | Location: Engg. Planning,verified,2026-10-21 23:49:56.251+05:30
+24,DRM Office PC (HP),192.168.40.129,F8:ED:FC:DF:6B:22,PC,Auto-registered from MAC Inventory & Sophos ARP discovery. OEM: HP,DRM Office Complex,,DRM Office,,,,,,Site: Jammu Tawi (JAT) | Location: DRM Office,verified,2026-10-21 23:50:05.597+05:30
+25,Home Router Airtel,192.168.1.1,F0:ED:B8:0E:0C:D0,Router,,Home,1,Home Lobby,1,1,1,,,,unverified,
+26,DRM Cabin,192.168.40.7,48-EA-62-3C-BB-79,PC,,DRM Office Complex,Ground Floor,DRM Room,Rack 01,,,,,,verified,2026-10-22 17:23:04.468+05:30
+41,Watchdog Switch,192.168.41.1,30:43:d7:21:40:a1,Core Switch,,DRM Office Complex,1,IT Room,5,,,,,,verified,2026-10-26 13:34:09.702+05:30
+44,Sr. DSO Cabin,,24:6A:0E:71:EA:06,PC,,DRM Office Complex,1,Sr. DSO Cabin,,,,,,,verified,2026-11-01 20:22:10.287+05:30
+45,Sr.DEN-Co,192.168.40.221,8C:32:23:4F:7C:1D,PC,,DRM Office Complex,,Sr.DEN-Co  Cabin,,,,,,,unverified,
+46,Sr.DEN-Co,,D8:BB:C1:3B:C5:A9,PC,,DRM Office Complex,,Sr.DEN-Co  Cabin,,,,,,,verified,2026-11-01 20:25:13.166+05:30
+47,Sr.DEN-I,192.168.40.38,04:7C:16:10:8D:76,PC,,DRM Office Complex,,Sr.DEN-I Cabin,,,,,,,verified,2026-11-01 20:27:09.288+05:30
+48,Sr.ADEN,,04:7C:16:13:23:1A,PC,,DRM Office Complex,,Sr.ADEN,,,,,,,verified,2026-11-01 20:28:27.535+05:30
+49,ADEN-Track,,00:D0:0D:25:F0:36,PC,,DRM Office Complex,,ADEN-Track Cabin,,,,,,,verified,2026-11-01 20:30:33.517+05:30
+50,S&T-P&D,,8C:32:23:37:C4:85,PC,,DRM Office Complex,,S&T-P&D Cabin,,,,,,,verified,2026-11-01 20:32:29.666+05:30
+51,S&T-P&D,,2C:58:B9:70:89:4B,PC,,DRM Office Complex,,S&T-P&D Cabin,,,,,,,verified,2026-11-01 20:33:58.595+05:30
+52,S&T-P&D,,C4:65:16:2A:21:3B,PC,,DRM Office Complex,,S&T-P&D Cabin,,,,,,,verified,2026-11-01 20:34:53.78+05:30
+53,S&T Signal,,00:FF:80:AB:75:AE,PC,,DRM Office Complex,,S&T Signal Cabin,,,,,,,verified,2026-11-01 20:37:10.644+05:30
+54,CMI,,00:E0:4C:52:E1:C9,PC,,DRM Office Complex,,CMI Office,,,,,,,verified,2026-11-01 20:38:26.139+05:30
+55,IT Room,192.168.41.0,C4:00:AD:9F:20:99,PC,,DRM Office Complex,,IT Room,,,,,,,verified,2026-11-01 20:39:25.864+05:30
+56,Sr. DSC,,00:E0:4C:0A:D0:33,PC,,DRM Office Complex,,Sr. DSC Cabin,,,,,,,verified,2026-11-01 20:40:58.678+05:30
+57,Sr. DSC,,00:E0:4C:04:2D:A4,PC,,DRM Office Complex,,Sr. DSC Office,,,,,,,verified,2026-11-01 20:42:26.198+05:30
+58,Sr. DSC,,00:D0:0D:25:F0:D1,PC,,DRM Office Complex,,Sr. DSC Office,,,,,,,verified,2026-11-01 20:43:19.414+05:30
+59,Sr. DSC,,00:FF:C5:62:82:CD,PC,,DRM Office Complex,,Sr. DSC Office,,,,,,,verified,2026-11-01 20:44:15.036+05:30
+60,Sr. DSC,,B4:B6:86:E3:69:DA,PC,,DRM Office Complex,,Sr. DSC Office,,,,,,,verified,2026-11-01 20:44:59.342+05:30
+61,DRM Office(HP),,64:4E:D7:9F:AE:DB,PC,,DRM Office Complex,,DRM Office,,,,,,,verified,2026-11-01 20:49:30.044+05:30
+62,DRM Office(Acer),,8C:32:23:37:C5:E2,PC,,DRM Office Complex,,DRM Office,,,,,,,verified,2026-11-01 20:50:26.526+05:30
+63,Sr.DSO (Cynix),,A4:0C:66:24:B8:B7,PC,,DRM Office Complex,,Sr.DSO Office,,,,,,,verified,2026-11-01 20:52:33.55+05:30
+64,Sr.DSO (Cynix),,A4:0C:66:24:B2:FD,PC,,DRM Office Complex,,Sr.DSO Office,,,,,,,verified,2026-11-01 20:53:17.409+05:30
+65,Sr.DSO (Acer),,8C:32:23:37:C6:8C,PC,,DRM Office Complex,,Sr.DSO Office,,,,,,,verified,2026-11-01 20:53:56.191+05:30
+66,Sr. ADEN (HP),169.254.47.156,00:E0:4C:38:11:29,PC,,DRM Office Complex,,Sr. ADEN Office,,,,,,,verified,2026-11-01 20:55:27.48+05:30
+67,Sr. ADEN (HP),,F4:39:09:22:3B:36,PC,,DRM Office Complex,,Sr. ADEN Office,,,,,,,verified,2026-11-01 20:56:12.545+05:30
+68,Engg. Planning PC (Acer),,8C:32:23:53:A6:D8,PC,,DRM Office Complex,,Engg. Planning,,,,,,,verified,2026-11-01 20:58:14.406+05:30
+69,Engg. Planning PC (Acer),192.168.41.49,8C:32:23;53:A7:83,PC,,DRM Office Complex,,Engg. Planning,,,,,,,verified,2026-11-01 20:59:12.557+05:30
+70,Engg. W&W (Acer),,8C:32:23:53:A6:A6,PC,,DRM Office Complex,,Engg. W&W  Branch,,,,,,,verified,2026-11-01 21:01:07.789+05:30
+71,Engg. W&W (Voltriq),192.168.41.79,60:57:18:F9:57:13,PC,,DRM Office Complex,,Engg. W&W  Branch,,,,,,,verified,2026-11-01 21:03:13.122+05:30
+72,Engg. W&W (Voltriq),192.168.40.249,00:D0:0D:25:F1:2E,PC,,DRM Office Complex,,Engg. W&W  Branch,,,,,,,verified,2026-11-01 21:04:16.964+05:30
+74,Engg (Acer),,8C:32:23:53:A6:94,PC,,DRM Office Complex,,Engg Branch,,,,,,,verified,2026-11-01 21:07:26.842+05:30
+75,Conference Room (Dell),192.168.40.66,D4:A2:CD:AB:2D:58,PC,,DRM Office Complex,,Conference Room,,,,,,,verified,2026-11-01 21:09:46.878+05:30
+77,Engg. Drawing PC (Voltriq),192.168.40.236,00:D0:0D:25:F0:D2,PC,,,,Engg. Drawing,,,,,,,verified,2026-11-02 12:56:22.492+05:30

@@ -6,6 +6,7 @@ import StatusBadge from '../components/common/StatusBadge';
 import LatencyIndicator from '../components/common/LatencyIndicator';
 import EmptyState from '../components/common/EmptyState';
 import Drawer from '../components/common/Drawer';
+import DeviceIdentifier from '../components/common/DeviceIdentifier';
 import { formatIndianDate, formatIndianDateTime } from '../utils/formatters';
 import {
   Layers,
@@ -564,10 +565,12 @@ export const MacInventory = () => {
                         </td>
                         {/* Device Name */}
                         <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 600 }}>{item.device_name}</span>
-                            <span style={{ fontSize: '10.5px', color: '#64748b' }}>({item.device_type})</span>
-                          </div>
+                          <DeviceIdentifier
+                            name={item.device_name}
+                            contactPerson={item.contact_person}
+                            contactPhone={item.contact_phone}
+                            extraBadge={item.device_type ? <span style={{ fontSize: '10.5px', color: '#64748b' }}>({item.device_type})</span> : null}
+                          />
                         </td>
                         {/* Department / Cabin */}
                         <td>
@@ -718,7 +721,13 @@ export const MacInventory = () => {
               </div>
               <div className="kv-grid">
                 <span className="kv-key">Asset Model / Name:</span>
-                <span className="kv-value">{selectedItem.device_name}</span>
+                <span className="kv-value">
+                  <DeviceIdentifier
+                    name={selectedItem.device_name}
+                    contactPerson={selectedItem.contact_person}
+                    contactPhone={selectedItem.contact_phone}
+                  />
+                </span>
 
                 <span className="kv-key">Station / Site:</span>
                 <span className="kv-value">{selectedItem.site_station}</span>
@@ -751,9 +760,17 @@ export const MacInventory = () => {
                 <span className="kv-key">Linked Probe Node:</span>
                 <span className="kv-value">
                   {selectedItem.linked_device_name ? (
-                    <span style={{ color: '#059669', fontWeight: 600 }}>
-                      {selectedItem.linked_device_name} ({selectedItem.registered_ip})
-                    </span>
+                    <div>
+                      <div style={{ color: '#059669', fontWeight: 600 }}>
+                        {selectedItem.linked_device_name} ({selectedItem.registered_ip})
+                      </div>
+                      {selectedItem.contact_person && (
+                        <div style={{ fontSize: '11px', color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                          <span style={{ color: '#6366f1' }}>👤</span>
+                          <span>{selectedItem.contact_person}</span>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <span style={{ color: '#94a3b8' }}>Not linked to ping scheduler</span>
                   )}

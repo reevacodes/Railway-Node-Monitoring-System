@@ -671,14 +671,16 @@ async function getSnapshotDetails(snapshotId, filter = {}) {
            dev.building AS registered_building,
            dev.room AS registered_room,
            dev.port_number AS registered_port,
+           dev.contact_person AS registered_contact_person,
+           dev.contact_phone AS registered_contact_phone,
            p.status AS ping_status,
            p.latency_ms AS ping_latency,
            p.checked_at AS ping_checked_at
     FROM arp_discoveries d
     LEFT JOIN mac_inventory m ON d.matched_inventory_id = m.id
     LEFT JOIN devices dev ON (
-      (dev.ip_address IS NOT NULL AND dev.ip_address = d.ip_address)
-      OR (d.normalized_mac IS NOT NULL AND dev.mac_address IS NOT NULL AND UPPER(REPLACE(REPLACE(dev.mac_address, ':', ''), '-', '')) = d.normalized_mac)
+      (d.normalized_mac IS NOT NULL AND dev.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(dev.mac_address, '[^a-fA-F0-9]', '', 'g')) = d.normalized_mac)
+      OR (m.device_id IS NOT NULL AND dev.id = m.device_id)
     )
     LEFT JOIN LATERAL (
       SELECT status, latency_ms, checked_at

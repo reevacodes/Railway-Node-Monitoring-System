@@ -5,6 +5,7 @@ import StatusBadge from '../components/common/StatusBadge';
 import { LocationBadge, CompactLocationView } from '../components/common/LocationBadge';
 import DeviceFormModal from '../components/devices/DeviceFormModal';
 import EmptyState from '../components/common/EmptyState';
+import DeviceIdentifier from '../components/common/DeviceIdentifier';
 import {
   Sliders,
   Plus,
@@ -153,7 +154,13 @@ export const DeviceManagement = () => {
                       <td className="mono" style={{ color: '#64748b' }}>
                         #{dev.id}
                       </td>
-                      <td style={{ fontWeight: 600 }}>{dev.name}</td>
+                      <td>
+                        <DeviceIdentifier
+                          name={dev.name}
+                          contactPerson={dev.contact_person}
+                          contactPhone={dev.contact_phone}
+                        />
+                      </td>
                       <td>
                         <span
                           style={{
