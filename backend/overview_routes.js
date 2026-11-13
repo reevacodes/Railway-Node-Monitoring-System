@@ -303,12 +303,13 @@ router.get('/api/overview/unified-devices', async (req, res) => {
         ) dd ON dd.registered_device_id = d.id
         LEFT JOIN latest_reg_status sh ON sh.device_id = d.id
         LEFT JOIN (
-          SELECT DISTINCT ON (COALESCE(device_id, 0), normalized_mac) *
+          SELECT DISTINCT ON (normalized_mac) *
           FROM mac_inventory
-          ORDER BY COALESCE(device_id, 0) DESC, id DESC
+          WHERE normalized_mac IS NOT NULL
+          ORDER BY normalized_mac, device_id NULLS LAST, id DESC
         ) inv ON (
-          inv.device_id = d.id 
-          OR (d.mac_address IS NOT NULL AND inv.normalized_mac IS NOT NULL AND LOWER(REGEXP_REPLACE(d.mac_address, '[^a-fA-F0-9]', '', 'g')) = inv.normalized_mac)
+          (inv.device_id IS NOT NULL AND inv.device_id = d.id)
+          OR (d.mac_address IS NOT NULL AND inv.normalized_mac = LOWER(REGEXP_REPLACE(d.mac_address, '[^a-fA-F0-9]', '', 'g')))
         )
 
         UNION ALL
