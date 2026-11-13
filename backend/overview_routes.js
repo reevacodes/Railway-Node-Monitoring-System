@@ -32,7 +32,7 @@ router.get('/api/overview/unified-summary', async (req, res) => {
     );
     const unmanagedCount = parseInt(unmanagedCountRes.rows[0].count, 10);
 
-    // 4. Discovered devices matched to inventory & registered devices
+    // 4. Assets matched to inventory (Registered devices + Unmanaged discovered hosts)
     const discMatchRes = await pool.query(`
       SELECT
         count(*) AS total_discovered,
@@ -41,6 +41,25 @@ router.get('/api/overview/unified-summary', async (req, res) => {
       FROM discovered_devices
     `);
     const discMatch = discMatchRes.rows[0];
+
+    const matchInvCountRes = await pool.query(`
+      SELECT count(*) AS count
+      FROM (
+        SELECT d.id FROM devices d
+        JOIN mac_inventory inv ON (
+          inv.device_id = d.id 
+          OR (d.mac_address IS NOT NULL AND inv.normalized_mac IS NOT NULL AND LOWER(REGEXP_REPLACE(d.mac_address, '[^a-fA-F0-9]', '', 'g')) = inv.normalized_mac)
+        )
+        UNION
+        SELECT dd.id FROM discovered_devices dd
+        JOIN mac_inventory inv ON (
+          inv.id = dd.matched_inventory_id
+          OR (dd.normalized_mac IS NOT NULL AND inv.normalized_mac = dd.normalized_mac)
+        )
+        WHERE dd.registered_device_id IS NULL
+      ) m
+    `);
+    const totalMatchedToInventory = parseInt(matchInvCountRes.rows[0].count, 10);
 
     // 5. Total unique observed assets (Registered + Unmanaged Discovered)
     const totalUniqueAssets = registeredCount + unmanagedCount;
@@ -161,7 +180,7 @@ router.get('/api/overview/unified-summary', async (req, res) => {
       latest_arp_raw_count: latestSnap ? latestSnap.total_entries : 0,
       valid_mac_devices_count: latestSnap ? latestSnap.entries_with_mac : 0,
       incomplete_no_mac_count: latestSnap ? (latestSnap.total_entries - latestSnap.entries_with_mac) : 0,
-      matched_to_inventory_count: parseInt(discMatch.matched_to_inventory, 10),
+      matched_to_inventory_count: totalMatchedToInventory,
       matched_to_registered_count: parseInt(discMatch.matched_to_registered, 10),
       unmanaged_discovered_count: unmanagedCount,
       total_unique_observed_assets: totalUniqueAssets,
@@ -256,7 +275,7 @@ router.get('/api/overview/unified-devices', async (req, res) => {
           d.contact_person AS contact_person,
           d.contact_phone AS contact_phone,
           CASE
-            WHEN dd.matched_inventory_id IS NOT NULL THEN 'matched'
+            WHEN dd.matched_inventory_id IS NOT NULL OR inv.id IS NOT NULL THEN 'matched'
             ELSE 'unmatched'
           END AS inventory_match_status,
           CASE
@@ -284,11 +303,13 @@ router.get('/api/overview/unified-devices', async (req, res) => {
         ) dd ON dd.registered_device_id = d.id
         LEFT JOIN latest_reg_status sh ON sh.device_id = d.id
         LEFT JOIN (
-          SELECT DISTINCT ON (device_id) *
+          SELECT DISTINCT ON (COALESCE(device_id, 0), normalized_mac) *
           FROM mac_inventory
-          WHERE device_id IS NOT NULL
-          ORDER BY device_id, id DESC
-        ) inv ON inv.device_id = d.id
+          ORDER BY COALESCE(device_id, 0) DESC, id DESC
+        ) inv ON (
+          inv.device_id = d.id 
+          OR (d.mac_address IS NOT NULL AND inv.normalized_mac IS NOT NULL AND LOWER(REGEXP_REPLACE(d.mac_address, '[^a-fA-F0-9]', '', 'g')) = inv.normalized_mac)
+        )
 
         UNION ALL
 
@@ -308,7 +329,7 @@ router.get('/api/overview/unified-devices', async (req, res) => {
           d_mac.contact_person AS contact_person,
           d_mac.contact_phone AS contact_phone,
           CASE
-            WHEN dd.matched_inventory_id IS NOT NULL THEN 'matched'
+            WHEN dd.matched_inventory_id IS NOT NULL OR inv.id IS NOT NULL THEN 'matched'
             ELSE 'unmatched'
           END AS inventory_match_status,
           CASE
@@ -328,7 +349,10 @@ router.get('/api/overview/unified-devices', async (req, res) => {
             ELSE false
           END AS is_newly_discovered
         FROM discovered_devices dd
-        LEFT JOIN mac_inventory inv ON inv.id = dd.matched_inventory_id
+        LEFT JOIN mac_inventory inv ON (
+          inv.id = dd.matched_inventory_id
+          OR (dd.normalized_mac IS NOT NULL AND inv.normalized_mac = dd.normalized_mac)
+        )
         LEFT JOIN devices d_mac ON (
           (dd.normalized_mac IS NOT NULL AND d_mac.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(d_mac.mac_address, '[^a-fA-F0-9]', '', 'g')) = dd.normalized_mac)
           OR (inv.device_id IS NOT NULL AND d_mac.id = inv.device_id)
