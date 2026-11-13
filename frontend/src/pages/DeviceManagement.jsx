@@ -216,7 +216,7 @@ export const DeviceManagement = () => {
                         />
                       </td>
                       <td className="mono" style={{ fontSize: '11px', color: dev.port_number ? '#0f172a' : '#94a3b8' }}>
-                        {dev.port_number || 'Unverified'}
+                        {dev.port_number || 'Unassigned'}
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '5px' }}>

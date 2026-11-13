@@ -319,7 +319,7 @@ export const DeviceDetails = () => {
               <div className="kv-grid">
                 <span className="kv-key">Connected Switch Port:</span>
                 <span className="kv-value mono" style={{ color: device.port_number ? '#0f172a' : '#94a3b8', fontWeight: 600 }}>
-                  {device.port_number || 'Unverified physical port'}
+                  {device.port_number || 'Unassigned / Not documented'}
                 </span>
 
                 <span className="kv-key">Parent / Upstream Device:</span>
