@@ -98,6 +98,7 @@ export const Overview = () => {
   const [unifiedDevices, setUnifiedDevices] = useState([]);
   const [unifiedTotal, setUnifiedTotal] = useState(0);
   const [unifiedPage, setUnifiedPage] = useState(1);
+  const [unifiedLimit, setUnifiedLimit] = useState(20);
   const [unifiedTotalPages, setUnifiedTotalPages] = useState(1);
   const [unifiedFilter, setUnifiedFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE' | 'UNKNOWN' | 'MANAGED' | 'UNMANAGED' | 'INVENTORY_MATCHED' | 'NEWLY_DISCOVERED'
   const [unifiedSearch, setUnifiedSearch] = useState('');
@@ -201,6 +202,7 @@ export const Overview = () => {
   // ----------------------------------------------------
   const fetchUnifiedDevices = useCallback(async ({
     page = unifiedPage,
+    limit = unifiedLimit,
     filter = unifiedFilter,
     search = debouncedUnifiedSearch,
     isSilent = false,
@@ -225,7 +227,7 @@ export const Overview = () => {
     try {
       const data = await api.getUnifiedOverviewDevices({
         page,
-        limit: 20,
+        limit,
         filter,
         search: search ? search.trim() : undefined,
         freshness_minutes: 10,
@@ -238,6 +240,9 @@ export const Overview = () => {
       setUnifiedDevices(data.items || []);
       setUnifiedTotal(data.total ?? 0);
       setUnifiedTotalPages(data.totalPages ?? 1);
+      if (data.page && data.page !== page) {
+        setUnifiedPage(data.page);
+      }
       setDevicesError(null);
       hasLoadedInitialDevices.current = true;
       setLastDevicesUpdated(new Date());
@@ -247,13 +252,14 @@ export const Overview = () => {
         return;
       }
 
-      if (hasLoadedInitialDevices.current) {
+      const msg = err.response?.data?.error || err.message || 'Failed to connect to devices API';
+      if (isSilent && hasLoadedInitialDevices.current) {
         // Background refresh failure: retain previous table rows, do NOT replace table
         console.warn('Background refresh of unified devices failed:', err);
       } else {
-        // Genuine initial load failure: show error screen with retry
+        // Explicit user query or initial load failure: surface error cleanly
         console.error('Failed to load unified devices:', err);
-        setDevicesError(err.response?.data?.error || err.message || 'Failed to connect to devices API');
+        setDevicesError(msg);
       }
     } finally {
       if (isMountedRef.current && reqId === devicesRequestIdRef.current) {
@@ -262,22 +268,23 @@ export const Overview = () => {
         setIsBackgroundRefreshing(false);
       }
     }
-  }, [unifiedPage, unifiedFilter, debouncedUnifiedSearch]);
+  }, [unifiedPage, unifiedLimit, unifiedFilter, debouncedUnifiedSearch]);
 
   // Keep fetchDevicesLatestRef pointing to current parameters
   useEffect(() => {
     fetchDevicesLatestRef.current = fetchUnifiedDevices;
   }, [fetchUnifiedDevices]);
 
-  // Trigger devices fetch when query parameters (page, filter, search) change
+  // Trigger devices fetch when query parameters (page, limit, filter, search) change
   useEffect(() => {
     fetchUnifiedDevices({
       page: unifiedPage,
+      limit: unifiedLimit,
       filter: unifiedFilter,
       search: debouncedUnifiedSearch,
       isSilent: false,
     });
-  }, [unifiedPage, unifiedFilter, debouncedUnifiedSearch]);
+  }, [unifiedPage, unifiedLimit, unifiedFilter, debouncedUnifiedSearch]);
 
   // Dedicated background polling cycle (every 15 seconds)
   useEffect(() => {
@@ -753,6 +760,10 @@ export const Overview = () => {
                 <a
                   href={`${api.baseUrl || 'http://localhost:5001'}/api/arp/snapshots/latest/export?format=csv`}
                   download
+                  onClick={(e) => {
+                    const base = api.baseUrl || 'http://localhost:5001';
+                    e.currentTarget.href = `${base}/api/arp/snapshots/latest/export?format=csv&_ts=${Date.now()}`;
+                  }}
                   className="btn btn-primary btn-sm"
                   style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
                   title="Download all entries from latest firewall snapshot as CSV"
@@ -932,8 +943,8 @@ export const Overview = () => {
               <input
                 type="text"
                 className="form-input"
-                style={{ paddingLeft: '28px', height: '30px', fontSize: '11.5px' }}
-                placeholder="Search device name, IP, MAC, location..."
+                style={{ paddingLeft: '28px', paddingRight: '26px', height: '30px', fontSize: '11.5px' }}
+                placeholder="Search device, person, IP, MAC, location..."
                 value={unifiedSearch}
                 onChange={(e) => setUnifiedSearch(e.target.value)}
               />
@@ -1166,7 +1177,7 @@ export const Overview = () => {
           )}
 
           {/* Pagination Controls */}
-          {unifiedTotalPages > 1 && (
+          {unifiedTotal > 0 && (
             <div
               style={{
                 padding: '10px 16px',
@@ -1174,27 +1185,93 @@ export const Overview = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
               }}
             >
-              <button
-                className="btn btn-secondary btn-sm"
-                disabled={unifiedPage <= 1}
-                onClick={() => setUnifiedPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft size={13} /> Previous
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11.5px', color: '#64748b' }}>
+                <span>
+                  Showing{' '}
+                  <strong>{(unifiedPage - 1) * unifiedLimit + 1}</strong>
+                  –
+                  <strong>{Math.min(unifiedPage * unifiedLimit, unifiedTotal)}</strong>
+                  {' '}of <strong>{unifiedTotal}</strong> assets
+                </span>
+                <select
+                  className="filter-select"
+                  style={{ height: '26px', fontSize: '11px', padding: '0 6px' }}
+                  value={unifiedLimit}
+                  onChange={(e) => {
+                    setUnifiedLimit(Number(e.target.value));
+                    setUnifiedPage(1);
+                  }}
+                  title="Rows per page"
+                >
+                  <option value={20}>20 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
+              </div>
 
-              <span style={{ fontSize: '11.5px', color: '#64748b' }}>
-                Page <strong>{unifiedPage}</strong> of <strong>{unifiedTotalPages}</strong> ({unifiedTotal} assets)
-              </span>
+              {unifiedTotalPages > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '11px', padding: '3px 8px' }}
+                    disabled={unifiedPage <= 1}
+                    onClick={() => setUnifiedPage((p) => Math.max(1, p - 1))}
+                  >
+                    <ChevronLeft size={13} /> Prev
+                  </button>
 
-              <button
-                className="btn btn-secondary btn-sm"
-                disabled={unifiedPage >= unifiedTotalPages}
-                onClick={() => setUnifiedPage((p) => Math.min(unifiedTotalPages, p + 1))}
-              >
-                Next <ChevronRight size={13} />
-              </button>
+                  {(() => {
+                    const pages = [];
+                    const total = unifiedTotalPages;
+                    const current = unifiedPage;
+                    const addPage = (n) => {
+                      if (!pages.includes(n)) pages.push(n);
+                    };
+                    addPage(1);
+                    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+                      addPage(i);
+                    }
+                    if (total > 1) addPage(total);
+
+                    const nodes = [];
+                    let prev = 0;
+                    for (const p of pages) {
+                      if (prev && p - prev > 1) {
+                        nodes.push(
+                          <span key={`gap-${p}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: '11px' }}>
+                            …
+                          </span>
+                        );
+                      }
+                      nodes.push(
+                        <button
+                          key={p}
+                          className={`btn btn-sm ${p === current ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ minWidth: '28px', padding: '3px 7px', fontSize: '11px' }}
+                          onClick={() => setUnifiedPage(p)}
+                        >
+                          {p}
+                        </button>
+                      );
+                      prev = p;
+                    }
+                    return nodes;
+                  })()}
+
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '11px', padding: '3px 8px' }}
+                    disabled={unifiedPage >= unifiedTotalPages}
+                    onClick={() => setUnifiedPage((p) => Math.min(unifiedTotalPages, p + 1))}
+                  >
+                    Next <ChevronRight size={13} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

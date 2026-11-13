@@ -339,24 +339,9 @@ router.get('/api/overview/unified-devices', async (req, res) => {
 
     // Filter conditions on unified_raw
     let whereClauses = ['1=1'];
-    const params = [];
-
-    // Search filter
-    if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const pIdx = params.length;
-      whereClauses.push(`(
-        LOWER(name) LIKE $${pIdx} OR
-        LOWER(ip_address) LIKE $${pIdx} OR
-        LOWER(COALESCE(mac_address, '')) LIKE $${pIdx} OR
-        LOWER(COALESCE(department_location, '')) LIKE $${pIdx} OR
-        LOWER(COALESCE(device_type, '')) LIKE ${pIdx} OR
-        LOWER(COALESCE(contact_person, '')) LIKE ${pIdx}
-      )`);
-    }
 
     // Category / Status Filter
-    const fUpper = filter.toUpperCase();
+    const fUpper = (filter || 'ALL').toUpperCase();
     if (fUpper === 'ONLINE') {
       whereClauses.push("effective_ping_status = 'online'");
     } else if (fUpper === 'OFFLINE' || fUpper === 'NO_REPLY') {
@@ -375,42 +360,179 @@ router.get('/api/overview/unified-devices', async (req, res) => {
 
     const whereStr = `WHERE ${whereClauses.join(' AND ')}`;
 
-    // Total count query
-    const countSql = `${baseQuery} SELECT count(*) FROM unified_raw ${whereStr}`;
-    const countRes = await pool.query(countSql, params);
-    const totalMatching = parseInt(countRes.rows[0].count, 10);
-
-    // Sorting
-    const sortFieldMap = {
-      name: 'name',
-      ip_address: 'ip_address',
-      mac_address: 'mac_address',
-      classification: 'classification',
-      status: 'effective_ping_status',
+    // Deterministic Sorting (case-insensitive for text, unique_key tie-breaker)
+    const sortExprMap = {
+      name: "LOWER(COALESCE(name, ''))",
+      ip_address: "COALESCE(ip_address, '')",
+      mac_address: "LOWER(COALESCE(mac_address, ''))",
+      classification: "LOWER(COALESCE(classification, ''))",
+      status: "LOWER(COALESCE(effective_ping_status, ''))",
       latency: 'ping_latency',
       last_ping: 'last_ping_at',
       last_seen: 'last_seen_at'
     };
-    const orderCol = sortFieldMap[sort_field] || 'name';
+    const orderExpr = sortExprMap[sort_field] || "LOWER(COALESCE(name, ''))";
     const orderDir = (sort_dir && sort_dir.toLowerCase() === 'desc') ? 'DESC' : 'ASC';
 
-    // Pagination query
-    const dataSql = `
+    const trimmedSearch = (search || '').trim();
+
+    if (!trimmedSearch) {
+      // Fast SQL count + deterministic paginated query when no search query is active
+      const countSql = `${baseQuery} SELECT count(*) FROM unified_raw ${whereStr}`;
+      const countRes = await pool.query(countSql);
+      const totalMatching = parseInt(countRes.rows[0].count, 10);
+      const totalPages = Math.max(1, Math.ceil(totalMatching / limitNum));
+      const clampedPage = Math.min(pageNum, totalPages);
+      const clampedOffset = (clampedPage - 1) * limitNum;
+
+      const dataSql = `
+        ${baseQuery}
+        SELECT * FROM unified_raw
+        ${whereStr}
+        ORDER BY ${orderExpr} ${orderDir} NULLS LAST, unique_key ASC
+        LIMIT $1 OFFSET $2
+      `;
+      const dataRes = await pool.query(dataSql, [limitNum, clampedOffset]);
+
+      return res.json({
+        items: dataRes.rows,
+        total: totalMatching,
+        page: clampedPage,
+        limit: limitNum,
+        totalPages,
+        freshness_threshold_minutes: freshness
+      });
+    }
+
+    // Forgiving multi-token, case-insensitive, punctuation-normalized + near-match search
+    const allSql = `
       ${baseQuery}
       SELECT * FROM unified_raw
       ${whereStr}
-      ORDER BY ${orderCol} ${orderDir} NULLS LAST
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      ORDER BY ${orderExpr} ${orderDir} NULLS LAST, unique_key ASC
     `;
+    const allRes = await pool.query(allSql);
 
-    const dataRes = await pool.query(dataSql, [...params, limitNum, offset]);
+    const levenshtein = (a, b) => {
+      if (a === b) return 0;
+      const al = a.length;
+      const bl = b.length;
+      if (al === 0) return bl;
+      if (bl === 0) return al;
+      const prev = new Array(bl + 1);
+      const curr = new Array(bl + 1);
+      for (let j = 0; j <= bl; j++) prev[j] = j;
+      for (let i = 1; i <= al; i++) {
+        curr[0] = i;
+        const ca = a.charCodeAt(i - 1);
+        for (let j = 1; j <= bl; j++) {
+          const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+          curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+        }
+        for (let j = 0; j <= bl; j++) prev[j] = curr[j];
+      }
+      return prev[bl];
+    };
+
+    const normalizeAlnum = (val) => String(val || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const tokens = trimmedSearch.toLowerCase().split(/\s+/).filter(Boolean);
+
+    const scoreRow = (row) => {
+      const primaryFields = [
+        row.name,
+        row.contact_person,
+        row.department_location,
+        row.device_type,
+      ].map((v) => String(v || '').toLowerCase());
+
+      const allFields = [
+        ...primaryFields,
+        row.contact_phone,
+        row.ip_address,
+        row.mac_address,
+        row.normalized_mac,
+        row.network_interface,
+        row.classification,
+        row.effective_ping_status,
+      ].map((v) => String(v || '').toLowerCase());
+
+      const allAlnum = allFields.map(normalizeAlnum);
+      const wordList = primaryFields
+        .join(' ')
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length >= 3);
+
+      let totalScore = 0;
+
+      for (const tok of tokens) {
+        const tokAlnum = normalizeAlnum(tok);
+        let bestTokenScore = 0;
+
+        // 1. Direct substring match (highest priority on name / contact_person)
+        for (let i = 0; i < allFields.length; i++) {
+          const field = allFields[i];
+          if (!field) continue;
+          if (field === tok) {
+            bestTokenScore = Math.max(bestTokenScore, i < 2 ? 120 : 90);
+          } else if (field.startsWith(tok)) {
+            bestTokenScore = Math.max(bestTokenScore, i < 2 ? 100 : 75);
+          } else if (field.includes(tok)) {
+            bestTokenScore = Math.max(bestTokenScore, i < 2 ? 80 : 60);
+          }
+        }
+
+        // 2. Punctuation/separator-insensitive match (e.g. "9c5322" -> "9C-53-22...", "srdste" -> "SR. DSTE")
+        if (bestTokenScore === 0 && tokAlnum.length >= 2) {
+          for (let i = 0; i < allAlnum.length; i++) {
+            if (allAlnum[i].includes(tokAlnum)) {
+              bestTokenScore = Math.max(bestTokenScore, i < 2 ? 70 : 50);
+            }
+          }
+        }
+
+        // 3. Fuzzy near-match for slight typos (e.g. "reva" -> "reeva", "accer" -> "acer")
+        if (bestTokenScore === 0 && tokAlnum.length >= 4) {
+          const maxDist = tokAlnum.length >= 7 ? 2 : 1;
+          for (const word of wordList) {
+            if (Math.abs(word.length - tokAlnum.length) > maxDist) continue;
+            const dist = levenshtein(tokAlnum, word);
+            if (dist <= maxDist) {
+              bestTokenScore = Math.max(bestTokenScore, 30 - dist * 10);
+            }
+          }
+        }
+
+        if (bestTokenScore === 0) {
+          return 0; // All tokens must match (direct, normalized, or near)
+        }
+        totalScore += bestTokenScore;
+      }
+
+      return totalScore;
+    };
+
+    const scored = [];
+    for (const row of allRes.rows) {
+      const s = scoreRow(row);
+      if (s > 0) scored.push({ row, score: s });
+    }
+
+    // Sort by relevance score descending, preserving deterministic SQL order for ties
+    scored.sort((a, b) => b.score - a.score);
+    const matchedRows = scored.map((entry) => entry.row);
+
+    const totalMatching = matchedRows.length;
+    const totalPages = Math.max(1, Math.ceil(totalMatching / limitNum));
+    const clampedPage = Math.min(pageNum, totalPages);
+    const startIdx = (clampedPage - 1) * limitNum;
+    const pagedItems = matchedRows.slice(startIdx, startIdx + limitNum);
 
     res.json({
-      items: dataRes.rows,
+      items: pagedItems,
       total: totalMatching,
-      page: pageNum,
+      page: clampedPage,
       limit: limitNum,
-      totalPages: Math.ceil(totalMatching / limitNum) || 1,
+      totalPages,
       freshness_threshold_minutes: freshness
     });
   } catch (err) {

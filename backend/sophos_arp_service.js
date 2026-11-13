@@ -696,7 +696,7 @@ async function isDuplicateOfLatest(newEntries, latestSnapshotId) {
   if (!latestSnapshotId) return false;
 
   const { rows: latestRows } = await pool.query(
-    `SELECT ip_address, normalized_mac, interface
+    `SELECT ip_address, normalized_mac, interface, arp_state
      FROM arp_discoveries
      WHERE snapshot_id = $1
      ORDER BY ip_address ASC`,
@@ -706,14 +706,23 @@ async function isDuplicateOfLatest(newEntries, latestSnapshotId) {
   if (latestRows.length === 0) return false;
   if (latestRows.length !== newEntries.length) return false;
 
+  const normalizeState = (rawState, rawMac) => {
+    const state = (rawState || 'UNKNOWN').toString().trim();
+    if (rawMac === '-' && (!state || state === 'UNKNOWN')) return 'incomplete';
+    return state.toLowerCase();
+  };
+
   const currentSignature = new Set(
-    latestRows.map(r => `${r.ip_address}|${r.normalized_mac || '-'}|${r.interface}`)
+    latestRows.map(r => `${r.ip_address}|${r.normalized_mac || '-'}|${r.interface}|${(r.arp_state || 'UNKNOWN').toString().trim().toLowerCase()}`)
   );
 
   for (const entry of newEntries) {
-    const norm = normalizeMac(entry.mac || entry.mac_address);
-    const iface = entry.interface || entry.iface || 'Unknown';
-    const sig = `${entry.ip || entry.ip_address}|${norm || '-'}|${iface}`;
+    const rawMac = (entry.mac || entry.mac_address || '').toString().trim();
+    const isExplicitIncomplete = rawMac === '-' || (entry.state || entry.arp_state || '').toString().toLowerCase().includes('incomplete');
+    const norm = isExplicitIncomplete ? null : normalizeMac(rawMac);
+    const iface = (entry.interface || entry.iface || 'Unknown').toString().trim();
+    const state = normalizeState(entry.state || entry.arp_state, rawMac);
+    const sig = `${entry.ip || entry.ip_address}|${norm || '-'}|${iface}|${state}`;
     if (!currentSignature.has(sig)) {
       return false; // Found a difference
     }

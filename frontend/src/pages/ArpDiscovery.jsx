@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNetwork } from '../context/NetworkContext';
 import api from '../services/api';
 import ArpStateBadge from '../components/common/ArpStateBadge';
@@ -164,6 +164,7 @@ export const ArpDiscovery = () => {
   // ==========================================
   // State: ARP Verification & Audit Center (Phase 6)
   // ==========================================
+  const latestSnapshotIdRef = useRef('');
   const [auditSnapshotId, setAuditSnapshotId] = useState('');
   const [auditReport, setAuditReport] = useState(null);
   const [auditDiscoveries, setAuditDiscoveries] = useState([]);
@@ -311,21 +312,26 @@ export const ArpDiscovery = () => {
   // ----------------------------------------------------
   // Fetch Raw Snapshot Data (Snapshot History)
   // ----------------------------------------------------
-  const fetchSnapshotsList = async () => {
+  const fetchSnapshotsList = useCallback(async () => {
     try {
       const list = await api.getArpSnapshots();
       setSnapshots(list);
-      if (list.length > 0 && !selectedSnapshotId) {
-        setSelectedSnapshotId(String(list[0].id));
+      if (list.length > 0) {
+        const newestId = String(list[0].id);
+        const prevLatestId = latestSnapshotIdRef.current;
+        latestSnapshotIdRef.current = newestId;
+
+        setSelectedSnapshotId((prev) => (!prev || prev === prevLatestId ? newestId : prev));
+        setAuditSnapshotId((prev) => (!prev || prev === prevLatestId ? newestId : prev));
       }
-      if (list.length >= 2 && !compareBaseId && !compareTargetId) {
-        setCompareTargetId(String(list[0].id));
-        setCompareBaseId(String(list[1].id));
+      if (list.length >= 2) {
+        setCompareTargetId((prev) => (!prev ? String(list[0].id) : prev));
+        setCompareBaseId((prev) => (!prev ? String(list[1].id) : prev));
       }
     } catch (err) {
       console.error('Failed to load snapshots list:', err);
     }
-  };
+  }, []);
 
   // ----------------------------------------------------
   // Snapshot History Table Filtering & Pagination
@@ -498,10 +504,14 @@ export const ArpDiscovery = () => {
     }
   };
 
-  // Initial load
+  // Initial load & periodic snapshot list sync (30s) so newly polled snapshots advance automatically
   useEffect(() => {
     fetchDiscoveredDevices();
     fetchSnapshotsList();
+    const timer = setInterval(() => {
+      fetchSnapshotsList();
+    }, 30000);
+    return () => clearInterval(timer);
   }, []);
 
   // Update on filter / view changes
@@ -2077,7 +2087,10 @@ export const ArpDiscovery = () => {
                 <button
                   className="btn btn-secondary btn-sm"
                   style={{ height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}
-                  onClick={() => fetchAuditData()}
+                  onClick={async () => {
+                    await fetchSnapshotsList();
+                    await fetchAuditData();
+                  }}
                   disabled={isAuditLoading}
                   title="Reload audit integrity metrics"
                 >
@@ -2087,8 +2100,20 @@ export const ArpDiscovery = () => {
 
                 {/* Export Dropdown / Buttons */}
                 <a
-                  href={api.getRawExportUrl(auditSnapshotId || 'latest', 'csv')}
+                  href={api.getRawExportUrl(
+                    !auditSnapshotId || String(auditSnapshotId) === String(snapshots[0]?.id)
+                      ? 'latest'
+                      : auditSnapshotId,
+                    'csv'
+                  )}
                   download
+                  onClick={(e) => {
+                    const targetId =
+                      !auditSnapshotId || String(auditSnapshotId) === String(snapshots[0]?.id)
+                        ? 'latest'
+                        : auditSnapshotId;
+                    e.currentTarget.href = `${api.getRawExportUrl(targetId, 'csv')}&_ts=${Date.now()}`;
+                  }}
                   className="btn btn-secondary btn-sm"
                   style={{ height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
                   title="Download untouched raw firewall extraction CSV"
@@ -2098,8 +2123,20 @@ export const ArpDiscovery = () => {
                 </a>
 
                 <a
-                  href={api.getVerifiedExportUrl(auditSnapshotId || 'latest', 'csv')}
+                  href={api.getVerifiedExportUrl(
+                    !auditSnapshotId || String(auditSnapshotId) === String(snapshots[0]?.id)
+                      ? 'latest'
+                      : auditSnapshotId,
+                    'csv'
+                  )}
                   download
+                  onClick={(e) => {
+                    const targetId =
+                      !auditSnapshotId || String(auditSnapshotId) === String(snapshots[0]?.id)
+                        ? 'latest'
+                        : auditSnapshotId;
+                    e.currentTarget.href = `${api.getVerifiedExportUrl(targetId, 'csv')}&_ts=${Date.now()}`;
+                  }}
                   className="btn btn-primary btn-sm"
                   style={{ height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
                   title="Download fully verified audit ledger with explanation reasons CSV"

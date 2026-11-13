@@ -738,7 +738,7 @@ async function getSnapshotDetails(snapshotId, filter = {}) {
 async function syncDiscoveredDevicesFromSnapshot(snapshotId, client) {
   const db = client || pool;
 
-  // Auto-assign firewall discovered IP to registered devices that have matching MAC but no IP yet
+  // Auto-assign firewall discovered IP to registered devices that have matching MAC (excluding APIPA 169.254.x.x)
   try {
     await db.query(
       `UPDATE devices dev
@@ -748,8 +748,9 @@ async function syncDiscoveredDevicesFromSnapshot(snapshotId, client) {
          AND d.has_mac = TRUE
          AND d.normalized_mac IS NOT NULL
          AND dev.mac_address IS NOT NULL
-         AND dev.ip_address IS NULL
-         AND UPPER(REPLACE(REPLACE(dev.mac_address, ':', ''), '-', '')) = d.normalized_mac
+         AND (dev.ip_address IS NULL OR dev.ip_address != d.ip_address)
+         AND d.ip_address NOT LIKE '169.254.%'
+         AND LOWER(REGEXP_REPLACE(dev.mac_address, '[^a-fA-F0-9]', '', 'g')) = d.normalized_mac
          AND NOT EXISTS (SELECT 1 FROM devices d2 WHERE d2.ip_address = d.ip_address AND d2.id != dev.id)`,
       [snapshotId]
     );
@@ -762,8 +763,8 @@ async function syncDiscoveredDevicesFromSnapshot(snapshotId, client) {
             d.matched_inventory_id, dev.id AS registered_device_id
      FROM arp_discoveries d
      LEFT JOIN devices dev ON (
-       (dev.ip_address IS NOT NULL AND dev.ip_address = d.ip_address)
-       OR (d.normalized_mac IS NOT NULL AND dev.mac_address IS NOT NULL AND UPPER(REPLACE(REPLACE(dev.mac_address, ':', ''), '-', '')) = d.normalized_mac)
+       (d.normalized_mac IS NOT NULL AND dev.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(dev.mac_address, '[^a-fA-F0-9]', '', 'g')) = d.normalized_mac)
+       OR (dev.ip_address IS NOT NULL AND dev.ip_address = d.ip_address)
      )
      WHERE d.snapshot_id = $1 AND d.has_mac = TRUE AND d.normalized_mac IS NOT NULL`,
     [snapshotId]
@@ -782,7 +783,7 @@ async function syncDiscoveredDevicesFromSnapshot(snapshotId, client) {
          arp_state = EXCLUDED.arp_state,
          snapshot_id = EXCLUDED.snapshot_id,
          matched_inventory_id = EXCLUDED.matched_inventory_id,
-         registered_device_id = COALESCE(discovered_devices.registered_device_id, EXCLUDED.registered_device_id),
+         registered_device_id = COALESCE(EXCLUDED.registered_device_id, discovered_devices.registered_device_id),
          last_seen_at = NOW(),
          updated_at = NOW()`,
       [

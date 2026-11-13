@@ -449,12 +449,21 @@ const escapeCsv = (val) => {
   return str;
 };
 
+// Prevent browser/proxy caching of dynamic snapshot exports
+const setNoCacheHeaders = (res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+};
+
 // ---------------------------------------------------------------------
 // 5d. GET /api/arp/snapshots/:id/raw-export
 // Export raw, untouched firewall extraction records
 // ---------------------------------------------------------------------
 router.get('/api/arp/snapshots/:id/raw-export', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
+
     let snapshotId;
     if (req.params.id === 'latest') {
       const latestRes = await pool.query('SELECT id, snapshot_name, imported_at, raw_payload_json FROM arp_snapshots ORDER BY id DESC LIMIT 1');
@@ -495,10 +504,10 @@ router.get('/api/arp/snapshots/:id/raw-export', async (req, res) => {
       });
     }
 
-    // CSV format
+    // CSV format (with UTF-8 BOM for Microsoft Excel)
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="sophos_raw_extraction_${snapshotId}_${dateStr}.csv"`);
-    let csv = ['Raw IP Address', 'Raw MAC Address', 'Interface', 'Firewall ARP State'].join(',') + '\r\n';
+    let csv = '\uFEFF' + ['Raw IP Address', 'Raw MAC Address', 'Interface', 'Firewall ARP State'].join(',') + '\r\n';
     for (const r of rawRecords) {
       csv += [
         escapeCsv(r.ip || r.ip_address || ''),
@@ -520,14 +529,25 @@ router.get('/api/arp/snapshots/:id/raw-export', async (req, res) => {
 // ---------------------------------------------------------------------
 async function handleVerifiedExport(req, res) {
   try {
+    setNoCacheHeaders(res);
+
     let snapshotId;
+    let latestPollAt = null;
     if (req.params.id === 'latest') {
       const latestRes = await pool.query('SELECT id, snapshot_name, imported_at FROM arp_snapshots ORDER BY id DESC LIMIT 1');
       if (latestRes.rows.length === 0) return res.status(404).json({ error: 'No snapshots found' });
       snapshotId = latestRes.rows[0].id;
+      const pollerRes = await pool.query('SELECT last_success_at, last_snapshot_id FROM sophos_poller_status WHERE id = 1').catch(() => ({ rows: [] }));
+      if (pollerRes.rows[0]?.last_success_at) {
+        latestPollAt = pollerRes.rows[0].last_success_at;
+      }
     } else {
       snapshotId = Number(req.params.id);
       if (!Number.isInteger(snapshotId) || snapshotId < 1) return res.status(400).json({ error: 'Invalid snapshot ID' });
+      const pollerRes = await pool.query('SELECT last_success_at, last_snapshot_id FROM sophos_poller_status WHERE id = 1').catch(() => ({ rows: [] }));
+      if (pollerRes.rows[0]?.last_snapshot_id === snapshotId && pollerRes.rows[0]?.last_success_at) {
+        latestPollAt = pollerRes.rows[0].last_success_at;
+      }
     }
 
     const snapRes = await pool.query('SELECT * FROM arp_snapshots WHERE id = $1', [snapshotId]);
@@ -549,19 +569,20 @@ async function handleVerifiedExport(req, res) {
         d.verification_reasons,
         d.match_status AS inventory_match_status,
         inv.device_name AS inventory_device_name,
-        inv.department_location,
+        COALESCE(inv.department_location, dd.department, dd.building_location) AS department_location,
         inv.expected_ip AS inventory_expected_ip,
         reg.id AS registered_device_id,
-        reg.name AS registered_device_name,
-        reg.device_type AS registered_device_type,
+        COALESCE(reg.name, dd.custom_name) AS registered_device_name,
+        COALESCE(reg.device_type, dd.device_type) AS registered_device_type,
         reg.contact_person AS registered_contact_person,
         reg.contact_phone AS registered_contact_phone,
-        p.status AS ping_status,
-        p.latency_ms AS ping_latency,
-        p.checked_at AS ping_checked_at,
+        COALESCE(p.status, dd.last_ping_status) AS ping_status,
+        COALESCE(p.latency_ms, dd.last_ping_latency) AS ping_latency,
+        COALESCE(p.checked_at, dd.last_ping_at) AS ping_checked_at,
         d.discovered_at
        FROM arp_discoveries d
        LEFT JOIN mac_inventory inv ON inv.id = d.matched_inventory_id
+       LEFT JOIN discovered_devices dd ON dd.ip_address = d.ip_address
        LEFT JOIN devices reg ON (
          (d.normalized_mac IS NOT NULL AND reg.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(reg.mac_address, '[^a-fA-F0-9]', '', 'g')) = d.normalized_mac)
          OR (inv.device_id IS NOT NULL AND reg.id = inv.device_id)
@@ -587,12 +608,13 @@ async function handleVerifiedExport(req, res) {
       return res.json({
         type: 'VALIDATED_ARP_SNAPSHOT_AUDIT',
         snapshot,
+        latestPollAt: latestPollAt || snapshot.imported_at,
         totalEntries: entriesRes.rows.length,
         entries: entriesRes.rows
       });
     }
 
-    // Default to CSV
+    // Default to CSV (with UTF-8 BOM for Microsoft Excel)
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="sophos_verified_snapshot_${snapshotId}_${dateStr}.csv"`);
 
@@ -613,14 +635,19 @@ async function handleVerifiedExport(req, res) {
       'Department / Location',
       'Inventory Expected IP',
       'Registered Node Name',
+      'Contact Person',
       'Registered Node Type',
       'Decoupled Ping Reachability',
       'Ping Latency (ms)',
       'Ping Last Checked At',
-      'Discovered At'
+      'Snapshot Created At',
+      'Latest Poll Verified At'
     ];
 
-    let csvContent = headers.join(',') + '\r\n';
+    const effectivePollTime = latestPollAt || snapshot.imported_at;
+    const effectivePollTimeStr = effectivePollTime ? new Date(effectivePollTime).toLocaleString() : '';
+
+    let csvContent = '\uFEFF' + headers.join(',') + '\r\n';
     for (const row of entriesRes.rows) {
       const reasonsStr = Array.isArray(row.verification_reasons)
         ? row.verification_reasons.join('; ')
@@ -643,11 +670,13 @@ async function handleVerifiedExport(req, res) {
         escapeCsv(row.department_location),
         escapeCsv(row.inventory_expected_ip),
         escapeCsv(row.registered_device_name),
+        escapeCsv(row.registered_contact_person || ''),
         escapeCsv(row.registered_device_type),
-        escapeCsv(row.ping_status || 'UNKNOWN / NOT PROBED'),
+        escapeCsv(row.ping_status ? row.ping_status.toUpperCase() : 'UNKNOWN / NOT PROBED'),
         escapeCsv(row.ping_latency !== null && row.ping_latency !== undefined ? row.ping_latency : ''),
         escapeCsv(row.ping_checked_at ? new Date(row.ping_checked_at).toLocaleString() : ''),
-        escapeCsv(row.discovered_at ? new Date(row.discovered_at).toLocaleString() : '')
+        escapeCsv(row.discovered_at ? new Date(row.discovered_at).toLocaleString() : ''),
+        escapeCsv(effectivePollTimeStr)
       ];
       csvContent += cols.join(',') + '\r\n';
     }
@@ -666,6 +695,8 @@ router.get('/api/arp/snapshots/:id/verified-export', handleVerifiedExport);
 // ---------------------------------------------------------------------
 router.get('/api/arp/snapshots/compare/export', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
+
     let { base_id, target_id, format } = req.query;
     if (!base_id || !target_id) {
       const snapsRes = await pool.query('SELECT id FROM arp_snapshots ORDER BY id DESC LIMIT 2');
@@ -689,7 +720,7 @@ router.get('/api/arp/snapshots/compare/export', async (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="snapshot_comparison_${base_id}_vs_${target_id}_${dateStr}.csv"`);
 
-    let csv = ['Delta Category', 'IP Address', 'MAC Address', 'Interface', 'Previous Value', 'Current Value', 'Observed At / Note'].join(',') + '\r\n';
+    let csv = '\uFEFF' + ['Delta Category', 'IP Address', 'MAC Address', 'Interface', 'Previous Value', 'Current Value', 'Observed At / Note'].join(',') + '\r\n';
 
     for (const item of (diff.newMacs || [])) {
       csv += ['NEW_DISCOVERY', escapeCsv(item.ip_address), escapeCsv(item.mac_address), escapeCsv(item.interface), '-', 'Observed in target', escapeCsv(item.discovered_at || '')].join(',') + '\r\n';
