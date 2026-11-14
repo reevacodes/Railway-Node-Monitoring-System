@@ -19,32 +19,8 @@ router.get('/api/mac-inventory', async (req, res) => {
   try {
     const { search, department, match_status, arp_state, interface: iface } = req.query;
 
-    // Latest discovery subquery per normalized_mac
-    // Distinct on normalized_mac ordered by discovered_at desc
+    // Latest discovery per normalized_mac via index-backed LATERAL join
     const query = `
-      WITH latest_arp AS (
-        SELECT DISTINCT ON (d.normalized_mac)
-          d.id AS discovery_id,
-          d.normalized_mac,
-          d.ip_address AS discovered_ip,
-          d.interface AS discovered_interface,
-          d.arp_state,
-          d.discovered_at,
-          s.snapshot_name
-        FROM arp_discoveries d
-        JOIN arp_snapshots s ON s.id = d.snapshot_id
-        WHERE d.normalized_mac IS NOT NULL
-        ORDER BY d.normalized_mac, d.discovered_at DESC, d.id DESC
-      ),
-      latest_device_status AS (
-        SELECT DISTINCT ON (device_id)
-          device_id,
-          status AS ping_status,
-          latency_ms AS ping_latency,
-          checked_at AS ping_checked_at
-        FROM status_history
-        ORDER BY device_id, checked_at DESC, id DESC
-      )
       SELECT
         inv.id,
         inv.mac_address,
@@ -86,12 +62,35 @@ router.get('/api/mac-inventory', async (req, res) => {
         p.ping_latency,
         p.ping_checked_at
       FROM mac_inventory inv
-      LEFT JOIN latest_arp arp ON arp.normalized_mac = inv.normalized_mac
+      LEFT JOIN LATERAL (
+        SELECT
+          d.id AS discovery_id,
+          d.normalized_mac,
+          d.ip_address AS discovered_ip,
+          d.interface AS discovered_interface,
+          d.arp_state,
+          d.discovered_at,
+          s.snapshot_name
+        FROM arp_discoveries d
+        JOIN arp_snapshots s ON s.id = d.snapshot_id
+        WHERE d.normalized_mac = inv.normalized_mac
+        ORDER BY d.discovered_at DESC, d.id DESC
+        LIMIT 1
+      ) arp ON true
       LEFT JOIN devices dev ON (
         (inv.device_id IS NOT NULL AND dev.id = inv.device_id)
         OR (inv.normalized_mac IS NOT NULL AND dev.mac_address IS NOT NULL AND LOWER(REGEXP_REPLACE(dev.mac_address, '[^a-fA-F0-9]', '', 'g')) = inv.normalized_mac)
       )
-      LEFT JOIN latest_device_status p ON p.device_id = dev.id
+      LEFT JOIN LATERAL (
+        SELECT
+          sh.status AS ping_status,
+          sh.latency_ms AS ping_latency,
+          sh.checked_at AS ping_checked_at
+        FROM status_history sh
+        WHERE sh.device_id = dev.id
+        ORDER BY sh.checked_at DESC, sh.id DESC
+        LIMIT 1
+      ) p ON true
       ORDER BY inv.id ASC
     `;
 

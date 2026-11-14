@@ -108,12 +108,6 @@ router.get('/api/overview/unified-summary', async (req, res) => {
     // 7. Reachability breakdown with freshness evaluation across unified population
     // Registered devices latest status
     const regReachabilityQuery = `
-      WITH latest_status AS (
-        SELECT DISTINCT ON (device_id)
-          device_id, status, latency_ms, checked_at
-        FROM status_history
-        ORDER BY device_id, checked_at DESC, id DESC
-      )
       SELECT
         count(*) FILTER (
           WHERE LOWER(s.status) = 'online' 
@@ -130,7 +124,13 @@ router.get('/api/overview/unified-summary', async (req, res) => {
             OR LOWER(s.status) = 'unknown'
         ) AS unknown
       FROM devices d
-      LEFT JOIN latest_status s ON s.device_id = d.id
+      LEFT JOIN LATERAL (
+        SELECT sh.status, sh.checked_at
+        FROM status_history sh
+        WHERE sh.device_id = d.id
+        ORDER BY sh.checked_at DESC, sh.id DESC
+        LIMIT 1
+      ) s ON true
     `;
     const regReachRes = await pool.query(regReachabilityQuery, [freshnessMinutes]);
     const regReach = regReachRes.rows[0];
@@ -246,13 +246,7 @@ router.get('/api/overview/unified-devices', async (req, res) => {
 
     // Base CTE: Unified Devices (Deduplicated)
     const baseQuery = `
-      WITH latest_reg_status AS (
-        SELECT DISTINCT ON (device_id)
-          device_id, status, latency_ms, checked_at
-        FROM status_history
-        ORDER BY device_id, checked_at DESC, id DESC
-      ),
-      prior_snapshot_macs AS (
+      WITH prior_snapshot_macs AS (
         SELECT DISTINCT normalized_mac
         FROM arp_discoveries
         WHERE snapshot_id = ${previousSnapId ? Number(previousSnapId) : -1} 
@@ -301,7 +295,13 @@ router.get('/api/overview/unified-devices', async (req, res) => {
           WHERE registered_device_id IS NOT NULL
           ORDER BY registered_device_id, last_seen_at DESC NULLS LAST, id DESC
         ) dd ON dd.registered_device_id = d.id
-        LEFT JOIN latest_reg_status sh ON sh.device_id = d.id
+        LEFT JOIN LATERAL (
+          SELECT sh.status, sh.latency_ms, sh.checked_at
+          FROM status_history sh
+          WHERE sh.device_id = d.id
+          ORDER BY sh.checked_at DESC, sh.id DESC
+          LIMIT 1
+        ) sh ON true
         LEFT JOIN (
           SELECT DISTINCT ON (normalized_mac) *
           FROM mac_inventory

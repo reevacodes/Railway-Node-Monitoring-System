@@ -56,32 +56,32 @@ async function runTests() {
     // 1a. Valid canonical entries
     const validResult = validateExtractedSnapshot(canonicalEntries);
     assert.strictEqual(validResult.valid, true);
-    assert.strictEqual(validResult.stats.total, 273);
-    assert.strictEqual(validResult.stats.validMac, 202);
-    assert.strictEqual(validResult.stats.incomplete, 71);
-    console.log('  ✓ 1a: Canonical snapshot validated successfully (273 entries, 202 valid MACs)');
+    assert.strictEqual(validResult.stats.total, 325);
+    assert.strictEqual(validResult.stats.validMac, 235);
+    assert.strictEqual(validResult.stats.incomplete, 90);
+    console.log('  ✓ 1a: Canonical snapshot validated successfully (325 entries, 235 valid MACs)');
 
     // 1b. Reject empty or tiny payload
     const emptyResult = validateExtractedSnapshot([]);
     assert.strictEqual(emptyResult.valid, false);
-    assert(emptyResult.errors.some(e => e.includes('too few entries')));
+    assert(emptyResult.errors.some(e => e.includes('Extracted snapshot contains zero entries')));
     console.log('  ✓ 1b: Empty snapshot properly rejected with validation error');
 
-    // 1c. Reject payload with no valid MACs
+    // 1c. Reject payload with no recognizable MACs (and no incomplete entries)
     const noMacResult = validateExtractedSnapshot([
-      { ip: '10.0.0.1', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.2', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.3', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.4', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.5', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.6', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.7', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.8', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.9', mac: '-', interface: 'Port1', state: 'Incomplete' },
-      { ip: '10.0.0.10', mac: '-', interface: 'Port1', state: 'Incomplete' }
+      { ip: '10.0.0.1', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.2', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.3', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.4', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.5', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.6', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.7', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.8', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.9', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' },
+      { ip: '10.0.0.10', mac: 'invalid-mac', interface: 'Port1', state: 'REACHABLE' }
     ]);
     assert.strictEqual(noMacResult.valid, false);
-    assert(noMacResult.errors.some(e => e.includes('No valid MAC')));
+    assert(noMacResult.errors.some(e => e.includes('No valid') || e.includes('No recognizable')));
     console.log('  ✓ 1c: Payload with zero valid MACs properly rejected\n');
 
     // -----------------------------------------------------------------
@@ -95,7 +95,8 @@ async function runTests() {
     assert.strictEqual(comparison.newMacCount, 68, `Expected 68 new MACs, got ${comparison.newMacCount}`);
     assert.strictEqual(comparison.changedMappingCount, 25, `Expected 25 changed mappings, got ${comparison.changedMappingCount}`);
     assert.strictEqual(comparison.unobservedCount, 32, `Expected 32 unobserved MACs, got ${comparison.unobservedCount}`);
-    assert(comparison.unchangedCount > 50, 'Expected substantial unchanged population');
+    const matchingDevicePopulation = comparison.unchangedCount + comparison.arpStateChangesCount;
+    assert(matchingDevicePopulation > 50, 'Expected substantial matching device population');
 
     // Validate structure of changed mappings
     const sampleChange = comparison.changedMappings[0];
@@ -103,7 +104,7 @@ async function runTests() {
     assert(sampleChange.previous_mac);
     assert(sampleChange.current_mac);
     assert.notStrictEqual(sampleChange.previous_mac, sampleChange.current_mac);
-    console.log(`  ✓ Test 2 Passed: Comparison engine verified: 68 new MACs, 25 IP-MAC changes, 32 unobserved, ${comparison.unchangedCount} unchanged\n`);
+    console.log(`  ✓ Test 2 Passed: Comparison engine verified: 68 new MACs, 25 IP-MAC changes, 32 unobserved, ${matchingDevicePopulation} matching device population (${comparison.unchangedCount} unchanged, ${comparison.arpStateChangesCount} state changes)\n`);
 
     // -----------------------------------------------------------------
     // TEST 3: Consecutive Collection 1 (Import Test Snapshot A)

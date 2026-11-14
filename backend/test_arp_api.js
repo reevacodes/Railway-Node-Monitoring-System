@@ -114,10 +114,10 @@ async function runApiTests() {
     const importData = await importRes.json();
     assert.strictEqual(importData.success, true);
     assert.strictEqual(importData.dryRun, true);
-    assert.strictEqual(importData.totalEntries, 273);
-    assert.strictEqual(importData.entriesWithMac, 202);
-    assert.strictEqual(importData.invalidEntriesCount, 71);
-    console.log(`  ✓ Test 6 Passed: Default import processed canonical 273 entries (202 with MAC, 71 incomplete) in dryRun mode\n`);
+    assert.strictEqual(importData.totalEntries, 325);
+    assert.strictEqual(importData.entriesWithMac, 235);
+    assert.strictEqual(importData.invalidEntriesCount, 90);
+    console.log(`  ✓ Test 6 Passed: Default import processed canonical 325 entries (235 with MAC, 90 incomplete) in dryRun mode\n`);
 
     // 7. POST /api/arp/snapshots/import-json (dryRun: true)
     console.log('[TEST 7] POST /api/arp/snapshots/import-json with custom JSON payload and dryRun: true...');

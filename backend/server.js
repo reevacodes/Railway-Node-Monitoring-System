@@ -61,11 +61,13 @@ app.get('/devices', async (req, res) => {
                        ls.latency_ms AS latest_latency_ms,
                        ls.checked_at AS latest_checked_at
                 FROM devices d
-                LEFT JOIN (
-                    SELECT DISTINCT ON (device_id) device_id, status, latency_ms, checked_at
-                    FROM status_history
-                    ORDER BY device_id, checked_at DESC
-                ) ls ON ls.device_id = d.id
+                LEFT JOIN LATERAL (
+                    SELECT sh.status, sh.latency_ms, sh.checked_at
+                    FROM status_history sh
+                    WHERE sh.device_id = d.id
+                    ORDER BY sh.checked_at DESC, sh.id DESC
+                    LIMIT 1
+                ) ls ON true
                 ORDER BY d.id
             `),
             pool.query(`

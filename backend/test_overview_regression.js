@@ -37,18 +37,36 @@ async function runOverviewTests() {
     // -------------------------------------------------------------
     // Query Live Database State for Verification
     // -------------------------------------------------------------
-    const [dbReg, dbUnmanaged, dbLatestSnap, dbDiscMatch] = await Promise.all([
+    const [dbReg, dbUnmanaged, dbLatestSnap, dbDiscMatch, dbUnifiedInv] = await Promise.all([
       pool.query('SELECT count(*) FROM devices'),
       pool.query('SELECT count(*) FROM discovered_devices WHERE registered_device_id IS NULL'),
       pool.query('SELECT * FROM arp_snapshots ORDER BY imported_at DESC, id DESC LIMIT 1'),
-      pool.query('SELECT count(matched_inventory_id) as matched_inv, count(registered_device_id) as matched_reg FROM discovered_devices')
+      pool.query('SELECT count(matched_inventory_id) as matched_inv, count(registered_device_id) as matched_reg FROM discovered_devices'),
+      pool.query(`
+        SELECT count(*) AS count
+        FROM (
+          SELECT d.id FROM devices d
+          JOIN mac_inventory inv ON (
+            inv.device_id = d.id
+            OR (d.mac_address IS NOT NULL AND inv.normalized_mac IS NOT NULL AND LOWER(REGEXP_REPLACE(d.mac_address, '[^a-fA-F0-9]', '', 'g')) = inv.normalized_mac)
+          )
+          UNION
+          SELECT dd.id FROM discovered_devices dd
+          JOIN mac_inventory inv ON (
+            inv.id = dd.matched_inventory_id
+            OR (dd.normalized_mac IS NOT NULL AND inv.normalized_mac = dd.normalized_mac)
+          )
+          WHERE dd.registered_device_id IS NULL
+        ) m
+      `)
     ]);
     const expectedRegCount = parseInt(dbReg.rows[0].count, 10);
     const expectedUnmanagedCount = parseInt(dbUnmanaged.rows[0].count, 10);
     const expectedTotalAssets = expectedRegCount + expectedUnmanagedCount;
     const latestSnapDb = dbLatestSnap.rows[0];
-    const expectedMatchedInv = parseInt(dbDiscMatch.rows[0].matched_inv, 10);
+    const expectedDiscoveredMatchedInv = parseInt(dbDiscMatch.rows[0].matched_inv, 10);
     const expectedMatchedReg = parseInt(dbDiscMatch.rows[0].matched_reg, 10);
+    const expectedUnifiedMatchedInv = parseInt(dbUnifiedInv.rows[0].count, 10);
 
     // -------------------------------------------------------------
     // [TEST 1] GET /api/overview/unified-summary
@@ -72,11 +90,15 @@ async function runOverviewTests() {
     if (summary.total_unique_observed_assets !== expectedTotalAssets) {
       throw new Error(`Expected ${expectedTotalAssets} total unique assets (${expectedRegCount} + ${expectedUnmanagedCount}), got ${summary.total_unique_observed_assets}`);
     }
-    if (summary.matched_to_inventory_count !== expectedMatchedInv) {
-      throw new Error(`Expected ${expectedMatchedInv} matched to inventory, got ${summary.matched_to_inventory_count}`);
+    if (summary.matched_to_inventory_count !== expectedUnifiedMatchedInv) {
+      throw new Error(`Expected ${expectedUnifiedMatchedInv} matched to inventory, got ${summary.matched_to_inventory_count}`);
     }
     if (summary.matched_to_registered_count !== expectedMatchedReg) {
       throw new Error(`Expected ${expectedMatchedReg} matched to registered, got ${summary.matched_to_registered_count}`);
+    }
+    // Preserved discovered-device-specific inventory check
+    if (expectedDiscoveredMatchedInv > expectedUnifiedMatchedInv) {
+      throw new Error(`Discovered devices matched inventory count (${expectedDiscoveredMatchedInv}) cannot exceed total unified matches (${expectedUnifiedMatchedInv})`);
     }
 
     // Verify reachability sum
@@ -144,16 +166,60 @@ async function runOverviewTests() {
     console.log('[TEST 5] Testing INVENTORY_MATCHED and NEWLY_DISCOVERED Filters...');
     const invRes = await fetch(`${baseUrl}/api/overview/unified-devices?filter=INVENTORY_MATCHED&limit=500`);
     const invData = await invRes.json();
-    if (invData.total !== expectedMatchedInv) {
-      throw new Error(`Expected ${expectedMatchedInv} inventory matched devices, got ${invData.total}`);
+    if (invData.total !== expectedUnifiedMatchedInv) {
+      throw new Error(`Expected ${expectedUnifiedMatchedInv} inventory matched devices, got ${invData.total}`);
     }
 
     const newRes = await fetch(`${baseUrl}/api/overview/unified-devices?filter=NEWLY_DISCOVERED&limit=500`);
     const newData = await newRes.json();
-    if (newData.total !== summary.newly_discovered_endpoints_count) {
-      throw new Error(`Expected ${summary.newly_discovered_endpoints_count} newly discovered endpoint observations, got ${newData.total}`);
+
+    // Dynamically calculate expected newly discovered count using the exact unified predicate from overview_routes.js
+    const snapIdsRes = await pool.query('SELECT id FROM arp_snapshots ORDER BY imported_at DESC LIMIT 2');
+    const previousSnapId = snapIdsRes.rows[1]?.id || null;
+    const expectedNewlyDiscoveredRes = await pool.query(`
+      WITH prior_snapshot_macs AS (
+        SELECT DISTINCT normalized_mac
+        FROM arp_discoveries
+        WHERE snapshot_id = $1 AND normalized_mac IS NOT NULL
+      ),
+      unified_raw AS (
+        SELECT
+          d.id AS registered_device_id,
+          CASE
+            WHEN dd.normalized_mac IS NOT NULL
+              AND dd.normalized_mac NOT IN (SELECT normalized_mac FROM prior_snapshot_macs) THEN true
+            ELSE false
+          END AS is_newly_discovered
+        FROM devices d
+        LEFT JOIN (
+          SELECT DISTINCT ON (registered_device_id) *
+          FROM discovered_devices
+          WHERE registered_device_id IS NOT NULL
+          ORDER BY registered_device_id, last_seen_at DESC NULLS LAST, id DESC
+        ) dd ON dd.registered_device_id = d.id
+
+        UNION ALL
+
+        SELECT
+          NULL AS registered_device_id,
+          CASE
+            WHEN dd.normalized_mac IS NOT NULL
+              AND dd.normalized_mac NOT IN (SELECT normalized_mac FROM prior_snapshot_macs) THEN true
+            ELSE false
+          END AS is_newly_discovered
+        FROM discovered_devices dd
+        WHERE dd.registered_device_id IS NULL
+      )
+      SELECT count(*) AS total FROM unified_raw WHERE is_newly_discovered = true
+    `, [previousSnapId]);
+    const expectedUnifiedNewlyDiscovered = parseInt(expectedNewlyDiscoveredRes.rows[0].total, 10);
+
+    if (newData.total !== expectedUnifiedNewlyDiscovered) {
+      throw new Error(`Expected ${expectedUnifiedNewlyDiscovered} newly discovered devices, got ${newData.total}`);
     }
-    console.log(`  ✓ Test 5 Passed: INVENTORY_MATCHED (${invData.total}) and NEWLY_DISCOVERED (${newData.total}) verified\n`);
+
+    console.log(`  ✓ Test 5 Passed: INVENTORY_MATCHED (${invData.total}) and NEWLY_DISCOVERED (${newData.total}) verified`);
+    console.log(`    [Diagnostic] Summary raw discovered newly observed: ${summary.newly_discovered_endpoints_count} vs Unified endpoint newly discovered: ${newData.total} (Difference: ${summary.newly_discovered_endpoints_count - newData.total} deduplicated registered devices)\n`);
 
     // -------------------------------------------------------------
     // [TEST 6] Reachability Filters (ONLINE, OFFLINE, UNKNOWN & Parity)

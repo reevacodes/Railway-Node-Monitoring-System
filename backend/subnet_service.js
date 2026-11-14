@@ -68,11 +68,6 @@ async function createOffice({ name, code, description }) {
 async function getDeviceReachabilityMap() {
   // 1. Registered devices with latest status
   const regQuery = `
-    WITH latest_st AS (
-      SELECT DISTINCT ON (device_id) device_id, status, latency_ms, checked_at
-      FROM status_history
-      ORDER BY device_id, checked_at DESC
-    )
     SELECT
       d.id,
       d.name,
@@ -86,7 +81,13 @@ async function getDeviceReachabilityMap() {
       ls.checked_at AS last_ping_at,
       'managed' AS classification
     FROM devices d
-    LEFT JOIN latest_st ls ON ls.device_id = d.id
+    LEFT JOIN LATERAL (
+      SELECT sh.status, sh.latency_ms, sh.checked_at
+      FROM status_history sh
+      WHERE sh.device_id = d.id
+      ORDER BY sh.checked_at DESC, sh.id DESC
+      LIMIT 1
+    ) ls ON true
     WHERE d.ip_address IS NOT NULL AND TRIM(d.ip_address) != ''
   `;
 

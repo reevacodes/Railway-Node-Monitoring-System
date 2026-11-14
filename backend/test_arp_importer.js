@@ -2,7 +2,7 @@
  * Unit & Integration Tests for ARP Importer (Module 1)
  * 
  * Verifies:
- * 1. Parsing of canonical sophos-arp-test/arp-snapshot.json (273 entries).
+ * 1. Parsing of canonical sophos-arp-test/arp-snapshot.json (325 entries).
  * 2. IPv4 validation and MAC normalization.
  * 3. Incomplete entries (mac: '-', state: 'Incomplete') preservation without inventing mappings.
  * 4. Read-only matching against mac_inventory without mutating inventory data.
@@ -28,17 +28,17 @@ async function runTests() {
   assert(fs.existsSync(canonicalPath), `Canonical snapshot not found at ${canonicalPath}`);
   
   const parsed = parseArpSnapshot(canonicalPath);
-  assert.strictEqual(parsed.stats.total, 273, `Expected 273 total entries, got ${parsed.stats.total}`);
-  assert.strictEqual(parsed.stats.withMac, 202, `Expected 202 entries with MAC, got ${parsed.stats.withMac}`);
-  assert.strictEqual(parsed.stats.incomplete, 71, `Expected 71 incomplete entries, got ${parsed.stats.incomplete}`);
+  assert.strictEqual(parsed.stats.total, 325, `Expected 325 total entries, got ${parsed.stats.total}`);
+  assert.strictEqual(parsed.stats.withMac, 235, `Expected 235 entries with MAC, got ${parsed.stats.withMac}`);
+  assert.strictEqual(parsed.stats.incomplete, 90, `Expected 90 incomplete entries, got ${parsed.stats.incomplete}`);
   assert.strictEqual(parsed.stats.invalidIp, 0, `Expected 0 invalid IPs, got ${parsed.stats.invalidIp}`);
   assert.strictEqual(parsed.metadata.source, 'Sophos IPv4 Neighbor Cache');
-  console.log('  ✓ Test 1 Passed: 273 total parsed (202 with MAC, 71 incomplete, 0 invalid IP)\n');
+  console.log('  ✓ Test 1 Passed: 325 total parsed (235 with MAC, 90 incomplete, 0 invalid IP)\n');
 
   // --- Test 2: Incomplete Entries Preservation ---
   console.log('[TEST 2] Verifying incomplete entries preservation...');
   const incompleteEntries = parsed.entries.filter(e => !e.has_mac);
-  assert.strictEqual(incompleteEntries.length, 71, `Expected 71 incomplete entries, got ${incompleteEntries.length}`);
+  assert.strictEqual(incompleteEntries.length, 90, `Expected 90 incomplete entries, got ${incompleteEntries.length}`);
   
   for (const entry of incompleteEntries) {
     assert.strictEqual(entry.has_mac, false, `has_mac must be false for incomplete entry: ${entry.ip_address}`);
@@ -79,7 +79,7 @@ async function runTests() {
   console.log('  ✓ Test 3 Passed: Edge cases (dashed MAC, Cisco dotted MAC, invalid IP, dirty strings) handled correctly\n');
 
   // --- Test 4: Database Transaction with Dry-Run / Test Rollback ---
-  console.log('[TEST 4] Database Transaction Test with 273 entries (testing dry-run rollback)...');
+  console.log('[TEST 4] Database Transaction Test with 325 entries (testing dry-run rollback)...');
   
   // Count baseline records
   const preSnapRes = await pool.query('SELECT count(*) FROM arp_snapshots');
@@ -98,11 +98,11 @@ async function runTests() {
 
   assert.strictEqual(dryResult.success, true);
   assert.strictEqual(dryResult.dryRun, true);
-  assert.strictEqual(dryResult.totalEntries, 273);
-  assert.strictEqual(dryResult.entriesWithMac, 202);
-  assert.strictEqual(dryResult.invalidEntriesCount, 71);
-  assert.strictEqual(dryResult.matchedInventoryCount, 20); // 20 unique inventory MACs
-  assert.strictEqual(dryResult.unmatchedCount, 180); // 202 - 22 matched entries = 180 unmatched
+  assert.strictEqual(dryResult.totalEntries, 325);
+  assert.strictEqual(dryResult.entriesWithMac, 235);
+  assert.strictEqual(dryResult.invalidEntriesCount, 90);
+  assert.strictEqual(dryResult.matchedInventoryCount, 26); // 26 unique inventory MACs
+  assert.strictEqual(dryResult.unmatchedCount, 207); // 235 with MAC - 28 matched entries = 207 unmatched
   assert.strictEqual(dryResult.totalInventoryRecords, baselineInvCount);
 
   // Verify DB state is completely unchanged (rollback succeeded)

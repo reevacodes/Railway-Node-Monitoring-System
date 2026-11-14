@@ -62,8 +62,8 @@ router.get('/api/discovered-devices', async (req, res) => {
         LOWER(COALESCE(dd.department, '')) LIKE $${pIdx} OR
         LOWER(COALESCE(dd.building_location, '')) LIKE $${pIdx} OR
         LOWER(COALESCE(inv.device_name, '')) LIKE $${pIdx} OR
-        LOWER(COALESCE(dev.name, '')) LIKE ${pIdx} OR
-        LOWER(COALESCE(dev.contact_person, '')) LIKE ${pIdx}
+        LOWER(COALESCE(dev.name, '')) LIKE $${pIdx} OR
+        LOWER(COALESCE(dev.contact_person, '')) LIKE $${pIdx}
       )`;
     }
 
